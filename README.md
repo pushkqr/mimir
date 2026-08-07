@@ -20,7 +20,7 @@ Named after the Norse figure who guarded the Well of Wisdom, Mimir represents th
   - **Hybrid Search**: dense vector search and BM25 keyword search, fused natively in **Weaviate**. The alpha weight is tuned per query, so GR-number lookups lean keyword-heavy while conceptual questions stay balanced.
   - **Self-Hosted Embeddings**: **BGE-M3** (1024-dimensional, multilingual) served through **Infinity**. No cloud embedding quota, no per-query embedding cost.
   - **Self-Hosted Cross-Encoder Reranking**: a **BGE reranker** scores query and candidate together on the same Infinity server. No LLM call, no token cost.
-  - **Swappable Generation**: **Ollama** serving Qwen3 on your own hardware, or **Cerebras** and **Gemini 2.5 Flash** when third-party inference is acceptable. One environment variable decides.
+  - **Swappable Generation**: **Ollama** serving Qwen3 on your own hardware, or **Cerebras** when third-party inference is acceptable. One environment variable decides. Generation fails closed in both modes: there is no fallback to a proprietary model.
 
 - **Multilingual by design**
   - Marathi and Hindi queries are detected and translated to English by a self-hosted **IndicTrans2** service before retrieval, so both halves of hybrid search keep working in every language against a single index.
@@ -77,7 +77,7 @@ sequenceDiagram
     participant Trans as IndicTrans2
     participant Embed as BGE-M3 + Reranker (Infinity)
     participant DB as Weaviate
-    participant LLM as Generation (Ollama / Cerebras / Gemini)
+    participant LLM as Generation (Ollama / Cerebras)
 
     User->>API: Query (English / Marathi / Hindi)
     API->>API: Geofence + token check
@@ -137,7 +137,7 @@ flowchart LR
 
     RET --> GEN{"Generation"}
     GEN -->|"sovereign"| LOC["Self-hosted<br/>open-weight model"]
-    GEN -->|"hosted"| CER["Cerebras<br/>Gemini on fallback"]
+    GEN -->|"hosted"| CER["Cerebras"]
 
     style MW fill:#3A1F1C,stroke:#C25C46,color:#F5F5F5
     style GEN fill:#3A2E14,stroke:#F5A623,color:#F5F5F5
@@ -222,6 +222,13 @@ Only the final step differs. Everything that reads the corpus is self-hosted eit
     'clusterBorder': '#8C6D1F',
     'edgeLabelBackground': '#141416',
     'nodeTextColor': '#F5F5F5'
+  },
+  'flowchart': {
+    'padding': 22,
+    'nodeSpacing': 70,
+    'rankSpacing': 70,
+    'curve': 'basis',
+    'useMaxWidth': false
   }
 } }%%
 flowchart LR
@@ -378,7 +385,7 @@ mimir/
 | Python 3.10+ | Core runtime |
 | Docker | Every service ships as a compose file |
 | HuggingFace account with IndicTrans2 access | Both translation checkpoints are gated |
-| Google Cloud project | Only for `hybrid` mode (Gemini, Document AI, Cloud Translation) |
+| Google Cloud project | Ingestion only: Document AI OCR and Cloud Translation in `hybrid` mode, plus the tier-3 Gemini Vision OCR fallback, which is **not** gated by `DEPLOYMENT_MODE` |
 | Cerebras API key | Only for `hybrid` mode generation |
 
 ### 1. Clone and install
@@ -488,7 +495,7 @@ The regression suite is the one that currently carries weight. It runs the demo 
 python -m scratch.regress
 ```
 
-It respects the Cerebras rate limit by spacing queries. Lowering that spacing causes a silent fallback to Gemini, which changes both timing and wording and makes failures harder to read.
+It respects the Cerebras rate limit by spacing queries. Lowering that spacing trips the limit, and since generation fails closed there is nothing to absorb it: the case reports an error rather than a slower answer.
 
 ```bash
 python -m unittest discover -s tests -v
