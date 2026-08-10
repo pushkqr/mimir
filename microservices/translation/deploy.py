@@ -14,7 +14,8 @@ pattern the other services use rather than inventing a new one.
     python deploy.py check   # is docker available, is .env present
     python deploy.py tier    # report detected hardware and the model tier it implies
     python deploy.py up      # write INDICTRANS_MODEL into .env if unset, then docker compose up -d
-    python deploy.py down
+    python deploy.py stop    # pause the container, keep it (fast to resume with `up`)
+    python deploy.py down    # stop and remove the container
     python deploy.py status
 """
 
@@ -152,6 +153,11 @@ def cmd_up(_args):
     return 1
 
 
+def cmd_stop(_args):
+    """Pause the container without removing it - a later `up` just restarts it, no rebuild."""
+    return _run(["docker", "compose", "stop"]).returncode
+
+
 def cmd_down(_args):
     return _run(["docker", "compose", "down"]).returncode
 
@@ -176,11 +182,12 @@ def main():
     sub.add_parser("check", help="Verify Docker and .env are ready. Changes nothing.")
     sub.add_parser("tier", help="Report detected hardware and the model tier it implies. Changes nothing.")
     sub.add_parser("up", help="Build and start the service, wait for it to become healthy.")
-    sub.add_parser("down", help="Stop the service.")
+    sub.add_parser("stop", help="Pause the container, keep it - a later `up` just restarts it.")
+    sub.add_parser("down", help="Stop the service and remove its container.")
     sub.add_parser("status", help="Check whether it is reachable right now.")
     args = parser.parse_args()
 
-    handlers = {"check": cmd_check, "tier": cmd_tier, "up": cmd_up, "down": cmd_down, "status": cmd_status}
+    handlers = {"check": cmd_check, "tier": cmd_tier, "up": cmd_up, "stop": cmd_stop, "down": cmd_down, "status": cmd_status}
     sys.exit(handlers[args.command](args))
 
 

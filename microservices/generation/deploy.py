@@ -45,7 +45,8 @@ speaks the standard /v1/chat/completions dialect, so any OpenAI-compatible serve
     python deploy.py check   # is docker available, is .env present, is a GPU usable
     python deploy.py tier    # report detected hardware and the engine/model it implies
     python deploy.py up      # start the chosen engine, then pull the tiered model
-    python deploy.py down
+    python deploy.py stop    # pause the container, keep it (fast to resume with `up`)
+    python deploy.py down    # stop and remove the container
     python deploy.py status
 """
 
@@ -475,6 +476,11 @@ def cmd_up(_args):
     return 0
 
 
+def cmd_stop(_args):
+    """Pause the container without removing it - a later `up` just restarts it, no rebuild."""
+    return _run(["docker", "compose"] + detect_plan()["compose_files"] + ["stop"]).returncode
+
+
 def cmd_down(_args):
     return _run(["docker", "compose"] + detect_plan()["compose_files"] + ["down"]).returncode
 
@@ -503,11 +509,12 @@ def main():
     tier_parser.add_argument("--model-only", action="store_true",
                              help="Print just the model name, for scripts.")
     sub.add_parser("up", help="Start the service and pull the tiered model.")
-    sub.add_parser("down", help="Stop the service.")
+    sub.add_parser("stop", help="Pause the container, keep it - a later `up` just restarts it.")
+    sub.add_parser("down", help="Stop the service and remove its container.")
     sub.add_parser("status", help="Check whether it is reachable right now.")
     args = parser.parse_args()
 
-    handlers = {"check": cmd_check, "tier": cmd_tier, "up": cmd_up, "down": cmd_down, "status": cmd_status}
+    handlers = {"check": cmd_check, "tier": cmd_tier, "up": cmd_up, "stop": cmd_stop, "down": cmd_down, "status": cmd_status}
     sys.exit(handlers[args.command](args))
 
 
