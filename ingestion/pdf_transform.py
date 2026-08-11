@@ -148,8 +148,9 @@ class _TransformDaemon:
             if result.get("status") == "ok":
                 return result.get("en_txt")
 
-            logger.error(f"PDF transform failed: {result.get('message', 'unknown')}")
-            return None
+            error_msg = result.get('message', 'unknown')
+            logger.error(f"PDF transform failed: {error_msg}")
+            raise RuntimeError(f"PDF transform failed: {error_msg}")
 
     def shutdown(self):
         """Gracefully stop the daemon."""

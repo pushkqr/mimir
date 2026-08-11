@@ -66,17 +66,24 @@ def _main():
             doc.to_disk(doc_json_path)
 
             # Locate the .en.txt the text_writer stage produced
-            en_txt_src = output_dir / (pdf_name + ".en.txt")
+            en_txt_dst_candidates = [
+                output_dir / (pdf_name + ".en.txt"),
+                output_dir / (pdf_name.replace(".pdf", ".en.txt")),
+                output_dir / (pdf_name.replace(".PDF", ".en.txt"))
+            ]
+            
+            en_txt_src = next((c for c in en_txt_dst_candidates if c.exists() and c.stat().st_size > 0), None)
 
-            if en_txt_src.exists() and en_txt_src.stat().st_size > 0:
+            if en_txt_src:
                 os.makedirs(target_output_dir, exist_ok=True)
-                en_txt_dst = os.path.join(target_output_dir, pdf_name + ".en.txt")
+                en_txt_dst = os.path.join(target_output_dir, en_txt_src.name)
                 shutil.copy2(str(en_txt_src), en_txt_dst)
                 print(json.dumps({"status": "ok", "en_txt": en_txt_dst}), flush=True)
             else:
+                out_files = os.listdir(output_dir) if output_dir.exists() else []
                 print(json.dumps({
                     "status": "error",
-                    "message": f"text_writer produced no .en.txt for {pdf_name}",
+                    "message": f"text_writer produced no .en.txt for {pdf_name}. output/ contains: {out_files}",
                 }), flush=True)
 
             # Tidy up input symlink/copy (output files stay for debugging)
