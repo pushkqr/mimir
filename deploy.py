@@ -444,6 +444,10 @@ def cmd_check(_args):
 
 def cmd_up(args):
     targets = [args.only] if args.only else list(SERVICE_ORDER)
+    if not args.only and hasattr(args, 'skip') and args.skip:
+        if args.skip in targets:
+            targets.remove(args.skip)
+
     unknown = [t for t in targets if t not in SERVICE_ORDER + OPTIONAL_SERVICES]
     if unknown:
         print(f"Unknown service(s): {', '.join(unknown)}. Known: {', '.join(SERVICE_ORDER + OPTIONAL_SERVICES)}")
@@ -616,6 +620,7 @@ def main():
 
     up_parser = sub.add_parser("up", help="Bring every service up, in order, then the application.")
     up_parser.add_argument("--only", choices=SERVICE_ORDER + OPTIONAL_SERVICES, help="Bring up just one service.")
+    up_parser.add_argument("--skip", choices=SERVICE_ORDER + OPTIONAL_SERVICES, help="Skip bringing up one service.")
     up_parser.add_argument("--host", default="localhost",
                            help="Passed to init when env files are missing. Default localhost.")
     up_parser.add_argument("--no-init", action="store_true",
