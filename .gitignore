@@ -23,6 +23,7 @@ data/*
 CLAUDE.md
 skills-lock.json
 mahGRs-main/
+orgpedia/
 # mimir-aws-stack.yaml is tracked: every secret it needs is a NoEcho parameter with no
 # default, so the template itself carries nothing sensitive. The values do NOT belong in
 # the repo, and they live in the parameters file below.

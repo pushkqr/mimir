@@ -70,7 +70,7 @@ def run_ingestion(
             "document_title": extracted_metadata.get("document_title", os.path.splitext(os.path.basename(target_file))[0]),
             "document_category": extracted_metadata.get("document_category", "Document"),
             "source_filename": os.path.basename(target_file),
-            # Lineage fields. The orgpedia path already carried these; this path dropped them,
+            # Lineage fields. The text ingestion path already carried these; this path dropped them,
             # so anything ingested through the admin console lost its supersedes/references
             # edges and the conflict warning in the system prompt had nothing to key on.
             "supersedes": extracted_metadata.get("supersedes"),
@@ -86,7 +86,7 @@ def run_ingestion(
                 weaviate_collection = weaviate_client.collections.get(collection_name)
                 with weaviate_collection.batch.dynamic() as batch:
                     for record in processed_records:
-                        # See orgpedia_pipeline: the id is what makes a re-ingest an update
+                        # See text_ingestion: the id is what makes a re-ingest an update
                         # rather than a duplicate.
                         batch.add_object(
                             uuid=record["id"],

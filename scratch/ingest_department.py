@@ -38,7 +38,7 @@ os.environ.setdefault("INGESTION_STATE_PATH", str(STATE_PATH))
 
 from core.utils import get_genai_client, get_weaviate_client  # noqa: E402
 from core.schema import ensure_collection  # noqa: E402
-from ingestion.orgpedia_pipeline import run_orgpedia_ingestion  # noqa: E402
+from ingestion.text_ingestion import run_text_ingestion  # noqa: E402
 
 
 def main():
@@ -70,7 +70,7 @@ def main():
         print(f"Ingesting {len(target_files)} documents into '{args.collection}' "
               f"(state: {STATE_PATH})...")
         started = time.time()
-        records = run_orgpedia_ingestion(
+        records = run_text_ingestion(
             gemini, weaviate_client=weaviate_client, collection_name=args.collection,
             docs_dir=str(STAGE_DIR), target_files=target_files,
         )

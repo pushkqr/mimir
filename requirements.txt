@@ -13,6 +13,13 @@ google-cloud-documentai
 # Document Parsing
 pymupdf4llm
 
+# Orgpedia pre-transform pipeline (runs in warm daemon subprocess)
+docint @ git+https://github.com/mukundesh/docInt.git
+orgpedia @ git+https://github.com/orgpedia/orgpedia.git
+translateindic @ git+https://github.com/orgpedia/translateIndic.git
+pytesseract>=0.3.10,<0.4
+pdfplumber>=0.9.0,<0.10
+
 # Chunking & Text Processing
 langchain-text-splitters
 

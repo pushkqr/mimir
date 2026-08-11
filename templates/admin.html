@@ -737,7 +737,7 @@ async function refresh(){
     const s=await(await api('/api/admin/stats')).json();
     $('stChunks').textContent=s.chunks==null?'n/a':s.chunks.toLocaleString();
     $('stPdfs').textContent=(s.files!=null?s.files:s.pdfs).toLocaleString();
-    $('stBreak').textContent=(s.documents?s.documents+' documents · '+s.pdfs+' PDF, '+s.orgpedia+' GR':'');
+    $('stBreak').textContent=(s.documents?s.documents+' documents · '+s.pdfs+' PDF, '+s.translated_docs+' translated':'');
     $('stOfficers').textContent=s.officers;
   }catch(_){}
   loadTokens();

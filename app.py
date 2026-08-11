@@ -320,19 +320,17 @@ async def api_admin_stats(request: Request):
     if not _is_admin(request):
         return _FORBIDDEN
     from db import list_tokens
-    stats = {"chunks": None, "documents": 0, "pdfs": 0, "orgpedia": 0, "officers": len(list_tokens())}
+    stats = {"chunks": None, "documents": 0, "pdfs": 0, "translated_docs": 0, "officers": len(list_tokens())}
     try:
         if DOCS_DIR.exists():
-            # One source document is either a PDF or an Orgpedia GR. Orgpedia GRs ship as a
-            # pair (<id>.pdf.txt original, <id>.pdf.en.txt translation), so count only the
-            # .en.txt side to avoid double-counting one document as two.
+            # One source document is either a raw PDF or a translated .en.txt.
+            # Count only the .en.txt side to avoid double-counting.
             files = [p for p in DOCS_DIR.rglob("*") if p.is_file()]
             stats["files"] = len(files)
             stats["pdfs"] = sum(1 for p in files if p.suffix.lower() == ".pdf")
-            # Orgpedia GRs ship as a pair per document (<id>.pdf.en.txt English,
-            # <id>.pdf.mr.txt Marathi), so the file count is double the document count.
-            stats["orgpedia"] = sum(1 for p in files if p.name.lower().endswith(".en.txt"))
-            stats["documents"] = stats["pdfs"] + stats["orgpedia"]
+            # Translated docs ship as .en.txt files, so count those.
+            stats["translated_docs"] = sum(1 for p in files if p.name.lower().endswith(".en.txt"))
+            stats["documents"] = stats["pdfs"] + stats["translated_docs"]
     except Exception as e:
         logger.warning(f"Could not count source documents: {e}")
     try:
@@ -548,15 +546,31 @@ def _ingest_job(filename: str, department: str):
     _ingest.update(running=True, file=filename, log=[f"Starting ingestion of {filename} into quarantine"],
                    error=None, finished_at=None)
     try:
-        from ingestion import run_ingestion
+        from ingestion.pdf_transform import transform_single_pdf
+        from ingestion.text_ingestion import run_text_ingestion
         ensure_collection(weaviate_client, QUARANTINE_COLLECTION)
         ensure_department_property(weaviate_client, QUARANTINE_COLLECTION)
-        records = run_ingestion(
+
+        # Phase 1: Transform PDF → .en.txt via document pipeline (warm daemon)
+        pdf_path = str(QUARANTINE_DIR / filename)
+        parsed_dir = QUARANTINE_DIR / "parsed"
+        parsed_dir.mkdir(exist_ok=True)
+
+        _ingest["log"].append("Transforming PDF via document pipeline …")
+        en_txt_path = transform_single_pdf(pdf_path, str(parsed_dir))
+        if not en_txt_path:
+            raise RuntimeError(f"PDF transform produced no output for {filename}")
+
+        en_txt_name = os.path.basename(en_txt_path)
+        _ingest["log"].append(f"Transform complete → {en_txt_name}")
+
+        # Phase 2: Ingest .en.txt into quarantine collection
+        records = run_text_ingestion(
             gemini_client,
             weaviate_client=weaviate_client,
             collection_name=QUARANTINE_COLLECTION,
-            docs_dir=str(QUARANTINE_DIR),
-            target_files=[filename],
+            docs_dir=str(parsed_dir),
+            target_files=[en_txt_name],
             department=department,
         )
         _ingest["log"].append(f"Indexed {len(records)} chunks from {filename} into quarantine ({department})")

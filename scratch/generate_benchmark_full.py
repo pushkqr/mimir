@@ -324,7 +324,7 @@ def main():
     # Dedupe: on case-insensitive filesystems (macOS/Windows), *.pdf and *.PDF
     # match the same files, so concatenating both lists doubles every PDF.
     pdf_files = sorted(set(glob.glob("docs/*.pdf") + glob.glob("docs/*.PDF")))
-    orgpedia_en = sorted(glob.glob("docs/orgpedia_mahGRs/*.en.txt"))
+    orgpedia_en = sorted(glob.glob("docs/parsed/*.en.txt"))
 
     all_docs = [(f, "pdf") for f in pdf_files] + [(f, "orgpedia") for f in orgpedia_en]
 

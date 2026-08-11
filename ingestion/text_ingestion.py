@@ -11,28 +11,28 @@ from ingestion.metadata import extract_document_metadata
 
 logger = get_logger(__name__)
 
-def run_orgpedia_ingestion(
+def run_text_ingestion(
     client: genai.Client,
     weaviate_client: Optional[Any] = None,
     collection_name: str = "GovDocs",
-    docs_dir: str = "docs/orgpedia_mahGRs",
+    docs_dir: str = "docs/parsed",
     target_files: Optional[List[str]] = None,
     force_reingest: bool = False,
     department: str = DEFAULT_DEPARTMENT,
 ) -> List[Dict[str, Any]]:
-    """Process pre-translated OrgPedia .en.txt files, bypassing OCR and translation."""
+    """Process pre-translated .en.txt files, bypassing OCR and translation."""
     if target_files:
         en_files = [os.path.join(docs_dir, f) for f in target_files]
     else:
         en_files = sorted(glob.glob(os.path.join(docs_dir, "*.en.txt")))
 
     if not en_files:
-        logger.info(f"No OrgPedia .en.txt files found in '{docs_dir}/'.")
+        logger.info(f"No .en.txt files found in '{docs_dir}/'.")
         return []
     
 
 
-    logger.info(f"Found {len(en_files)} OrgPedia text files in '{docs_dir}/'.")
+    logger.info(f"Found {len(en_files)} text files in '{docs_dir}/'.")
     all_processed_records = []
     state_path = os.getenv("INGESTION_STATE_PATH", os.path.join(os.getcwd(), "scratch", "ingestion_state.json"))
 
@@ -58,7 +58,7 @@ def run_orgpedia_ingestion(
 
         # Basic metadata extraction
         doc_year = 2025
-        # OrgPedia files are timestamped YYYYMMDD...
+        # Parsed files are timestamped YYYYMMDD...
         timestamp_match = re.match(r"^(\d{4})", filename)
         if timestamp_match:
             doc_year = int(timestamp_match.group(1))
@@ -71,7 +71,7 @@ def run_orgpedia_ingestion(
             doc_number = filename.split(".")[0]
 
         global_metadata = {
-            "doc_type": "OrgPedia GR",
+            "doc_type": "Government Resolution",
             "issuing_authority": extracted_metadata.get("issuing_authority", "Government of Maharashtra"),
             "year": extracted_metadata.get("year", doc_year),
             "doc_number": doc_number,

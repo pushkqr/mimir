@@ -3,8 +3,8 @@ import weaviate
 import weaviate.classes as wvc
 
 from benchmark import load_benchmark_cases, print_benchmark_report, run_benchmark
-from ingestion import run_ingestion
-from ingestion.orgpedia_pipeline import run_orgpedia_ingestion
+from ingestion.text_ingestion import run_text_ingestion
+from ingestion.pdf_transform import run_pdf_transform
 from core.log_config import get_logger
 from retrieval import run_retrieval
 
@@ -57,8 +57,11 @@ def main():
             else:
                 print("Using existing Weaviate collection: 'GovDocs'")
 
-        records = run_ingestion(client, weaviate_client=weaviate_client, collection_name=COLLECTION_NAME, docs_dir="docs")
-        orgpedia_records = run_orgpedia_ingestion(client, weaviate_client=weaviate_client, collection_name=COLLECTION_NAME)
+        # Phase 1: Transform new PDFs in docs/raw/ → docs/parsed/
+        run_pdf_transform(raw_dir="docs/raw", output_dir="docs/parsed")
+
+        # Phase 2: Ingest new .en.txt files into Weaviate
+        records = run_text_ingestion(client, weaviate_client=weaviate_client, collection_name=COLLECTION_NAME)
         print("Upsert and indexing complete! All vector records are stored in Weaviate.")
 
     if RUN_BENCHMARK:
