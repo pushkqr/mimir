@@ -5,18 +5,19 @@ services:
     environment:
       HF_HOME: /models
       HF_TOKEN: ${HF_TOKEN:?set HF_TOKEN in .env - both indictrans2 models are gated}
+      # translateindic (via docint's doc_translator_hf stage) auto-detects CUDA at import time
+      # (translator.py: DEVICE = "cuda" if torch.cuda.is_available() else "cpu") and moves its
+      # input tensors there, but the model itself stays on CPU regardless - a real device-
+      # placement bug in that library, not something to patch in a pip-installed dependency.
+      # OCR here runs through Tesseract (CPU) and table extraction is CPU-based too, so nothing
+      # in this pipeline actually benefits from GPU access as currently wired - hiding CUDA
+      # entirely sidesteps the bug with no loss.
+      CUDA_VISIBLE_DEVICES: ""
     volumes:
       - model_cache:/models
     ports:
       - "127.0.0.1:8003:8000"
     mem_limit: 2500m
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     logging:
       driver: "json-file"
       options:

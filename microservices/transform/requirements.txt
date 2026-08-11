@@ -9,11 +9,20 @@ uvicorn
 python-multipart
 docint @ git+https://github.com/mukundesh/docInt.git
 vendor/orgpedia_mahwater2024-0.0.1.tar.gz
-# Previous pin (da91a2fd5dd056b243fe7b08fefd3571be5c304f) was mimir's own commit hash, not a
-# commit that exists in orgpedia/orgpedia - pip's git checkout failed on it every time. This
-# is that repo's actual current HEAD on main, verified via `git ls-remote`.
-orgpedia @ git+https://github.com/orgpedia/orgpedia.git@6ef4d7eb0cabc5d0720fcb624b720a7738d2e6b7
+# orgpedia/ledger/old_ledger.py is a broken symlink committed upstream in orgpedia/orgpedia,
+# pointing outside the repo entirely (../../../mahgetNewGRs/.bak/ledger.py, a dead reference
+# to an unrelated local repo). hatchling's wheel build (`include = ["orgpedia"]`) tries to
+# os.stat() every file it enumerates and fails on this one with FileNotFoundError, reproducing
+# identically under pip and uv, from a live git checkout or a plain sdist. Vendored a sdist
+# built from a full clone with the dead symlink removed (`python -m build --sdist`).
+vendor/orgpedia-0.1.0.tar.gz
 indictranstokenizer @ git+https://github.com/orgpedia/IndicTransTokenizer.git
 translateindic @ git+https://github.com/orgpedia/translateIndic.git
 pytesseract>=0.3.10,<0.4
 pdfplumber>=0.9.0,<0.10
+# IndicTrans2's bundled custom modeling_indictrans.py predates transformers' current KV-cache
+# API - left unpinned, transformers resolves to a version whose generate() passes
+# past_key_values in a shape that file's forward() doesn't handle, failing with
+# AttributeError: 'NoneType' object has no attribute 'shape'. Same fix already applied in
+# microservices/translation/requirements.txt for the same underlying incompatibility.
+transformers==4.46.3
