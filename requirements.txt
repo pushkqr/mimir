@@ -13,11 +13,7 @@ google-cloud-documentai
 # Document Parsing
 pymupdf4llm
 
-# Orgpedia pre-transform pipeline (runs in warm daemon subprocess)
-docint @ git+https://github.com/mukundesh/docInt.git
-./vendor/orgpedia_mahwater2024-0.0.1.tar.gz
-indictranstokenizer @ git+https://github.com/orgpedia/IndicTransTokenizer.git
-translateindic @ git+https://github.com/orgpedia/translateIndic.git
+
 pytesseract>=0.3.10,<0.4
 pdfplumber>=0.9.0,<0.10
 

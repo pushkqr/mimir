@@ -63,6 +63,7 @@ SERVICE_PORTS = {
     "embeddings": 7997,
     "translation": 8001,
     "docling": 8002,
+    "transform": 8003,
     # Not 11434 (Ollama's own default): any bare `ollama serve` a teammate runs on a shared
     # host claims that port with no prompt to change it, colliding with this container.
     "generation": 11500,
@@ -132,7 +133,7 @@ def _set_env(path: Path, key: str, value: str, force: bool = False) -> bool:
 
 # Order matters for `up`/`down` only in the sense that infrastructure should be reachable
 # before the application starts; the services themselves have no dependencies on each other.
-SERVICE_ORDER = ["weaviate", "embeddings", "translation", "generation"]
+SERVICE_ORDER = ["weaviate", "embeddings", "translation", "generation", "transform"]
 OPTIONAL_SERVICES = ["docling"]  # not brought up by default; pass --only docling to include
 
 
@@ -282,6 +283,16 @@ def cmd_init(args):
     else:
         print(f"  {'admin token':<12} already set, leaving it")
 
+    # Propagate HF_TOKEN to microservices that need it
+    root_env_values = _read_env(root_env)
+    hf_token = root_env_values.get("HF_TOKEN", "")
+    if not _is_placeholder(hf_token):
+        for service in ["translation", "transform"]:
+            service_env = _service_dir(service) / ".env"
+            if _service_dir(service).exists():
+                _set_env(service_env, "HF_TOKEN", hf_token, force=True)
+        print(f"  {'HF_TOKEN':<12} propagated to translation and transform microservices")
+
     print()
     print("Derived service URLs")
     print("--------------------")
@@ -295,6 +306,7 @@ def cmd_init(args):
         # query-tier model and nothing reports it.
         "INGEST_TRANSLATION_SERVICE_URL": f"http://{host}:{SERVICE_PORTS['translation']}/translate",
         "DOCLING_SERVICE_URL": f"http://{host}:{SERVICE_PORTS['docling']}/parse",
+        "TRANSFORM_SERVICE_URL": f"http://{host}:{SERVICE_PORTS['transform']}/transform",
         "LOCAL_GEN_URL": f"http://{host}:{SERVICE_PORTS['generation']}/v1",
     }
     remote = host not in ("localhost", "127.0.0.1")

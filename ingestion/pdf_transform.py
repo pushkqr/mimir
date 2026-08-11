@@ -1,9 +1,4 @@
-"""PDF pre-transform: raw PDFs → .en.txt via a warm daemon subprocess.
-
-The daemon loads the docint pipeline (including the 200M IndicTrans2 model)
-once and keeps it resident.  Subsequent PDFs are processed without model reload,
-which is critical for the admin-console demo flow where single PDFs are uploaded
-one at a time.
+"""PDF pre-transform: raw PDFs → .en.txt via the transform microservice.
 
 Batch entry point
     run_pdf_transform("docs/raw", "docs/parsed")
@@ -13,12 +8,8 @@ Single-file entry point (used by admin console)
 """
 
 import glob
-import json
 import os
-import shutil
-import subprocess
-import sys
-import threading
+import requests
 from pathlib import Path
 from typing import List, Optional
 
@@ -27,166 +18,52 @@ from ingestion.state import compute_file_hash, save_ingestion_state, should_skip
 
 logger = get_logger(__name__)
 
-# Vendored pipeline files live next to this module.
-_PIPELINE_FILES = Path(__file__).resolve().parent / "transform_pipeline"
 _DEFAULT_TRANSFORM_STATE = os.path.join("scratch", "transform_state.json")
-
-
-# ---------------------------------------------------------------------------
-#  Warm daemon
-# ---------------------------------------------------------------------------
-
-class _TransformDaemon:
-    """Manages a long-lived subprocess that keeps the docint pipeline loaded."""
-
-    def __init__(self):
-        self._proc: Optional[subprocess.Popen] = None
-        self._lock = threading.Lock()
-        self._workdir: Optional[Path] = None
-
-    # -- working directory ---------------------------------------------------
-
-    def _setup_workdir(self) -> Path:
-        """Create a persistent runtime directory with the layout docint expects.
-
-        The vendored files are copied (not symlinked) so the layout is
-        self-contained and works on every OS without elevated privileges.
-        """
-        workdir = Path(os.environ.get("TRANSFORM_WORKDIR", "data/transform_work"))
-        workdir.mkdir(parents=True, exist_ok=True)
-
-        (workdir / "input").mkdir(exist_ok=True)
-        (workdir / "output").mkdir(exist_ok=True)
-
-        # src/writeTxt.yml
-        src_dir = workdir / "src"
-        src_dir.mkdir(exist_ok=True)
-        _copy_if_missing(_PIPELINE_FILES / "src" / "writeTxt.yml", src_dir / "writeTxt.yml")
-
-        # conf/ (glossary + cmaps)
-        conf_dst = workdir / "conf"
-        if not conf_dst.exists():
-            shutil.copytree(str(_PIPELINE_FILES / "conf"), str(conf_dst))
-
-        # word_recognizer.py (must be importable from CWD)
-        _copy_if_missing(_PIPELINE_FILES / "word_recognizer.py", workdir / "word_recognizer.py")
-
-        # worker.py (the daemon entry-point)
-        _copy_if_missing(_PIPELINE_FILES / "worker.py", workdir / "worker.py")
-
-        self._workdir = workdir
-        return workdir
-
-    # -- lifecycle -----------------------------------------------------------
-
-    def _ensure_running(self):
-        """Start (or restart) the daemon subprocess if it is not alive."""
-        if self._proc is not None and self._proc.poll() is None:
-            return  # still alive
-
-        if self._workdir is None:
-            self._setup_workdir()
-
-        logger.info("Starting transform daemon (loading pipeline + 200M model) …")
-
-        env = {**os.environ, "PYTHONPATH": str(self._workdir)}
-        self._proc = subprocess.Popen(
-            [sys.executable, "-u", "worker.py"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd=str(self._workdir),
-            text=True,
-            env=env,
-        )
-
-        # Block until the worker signals readiness (model loaded).
-        raw = self._proc.stdout.readline().strip()
-        if not raw:
-            stderr = self._proc.stderr.read()
-            raise RuntimeError(
-                f"Transform daemon exited immediately.  stderr:\n{stderr[:2000]}"
-            )
-
-        ready = json.loads(raw)
-        if ready.get("status") != "ready":
-            raise RuntimeError(f"Transform daemon sent unexpected ready signal: {raw}")
-
-        logger.info("Transform daemon ready.")
-
-    # -- public API ----------------------------------------------------------
-
-    def transform(self, pdf_path: str, output_dir: str) -> Optional[str]:
-        """Send one PDF to the daemon.  Returns abs path to .en.txt, or None."""
-        with self._lock:
-            try:
-                self._ensure_running()
-            except Exception as exc:
-                logger.error(f"Could not start transform daemon: {exc}")
-                return None
-
-            request = json.dumps({
-                "pdf_path": os.path.abspath(pdf_path),
-                "output_dir": os.path.abspath(output_dir),
-            })
-
-            try:
-                self._proc.stdin.write(request + "\n")
-                self._proc.stdin.flush()
-            except BrokenPipeError:
-                logger.warning("Transform daemon pipe broken — will restart on next call.")
-                self._proc = None
-                return None
-
-            raw = self._proc.stdout.readline().strip()
-            if not raw:
-                logger.error("Transform daemon returned empty response — marking for restart.")
-                self._proc = None
-                return None
-
-            result = json.loads(raw)
-            if result.get("status") == "ok":
-                return result.get("en_txt")
-
-            error_msg = result.get('message', 'unknown')
-            logger.error(f"PDF transform failed: {error_msg}")
-            raise RuntimeError(f"PDF transform failed: {error_msg}")
-
-    def shutdown(self):
-        """Gracefully stop the daemon."""
-        if self._proc and self._proc.poll() is None:
-            try:
-                self._proc.stdin.close()
-                self._proc.wait(timeout=30)
-            except Exception:
-                self._proc.kill()
-            logger.info("Transform daemon shut down.")
-
-
-# Module-level singleton — first call to transform() starts the daemon lazily.
-_daemon = _TransformDaemon()
-
-
-# ---------------------------------------------------------------------------
-#  Helpers
-# ---------------------------------------------------------------------------
-
-def _copy_if_missing(src: Path, dst: Path):
-    if not dst.exists():
-        shutil.copy2(str(src), str(dst))
-
 
 # ---------------------------------------------------------------------------
 #  Public API
 # ---------------------------------------------------------------------------
 
 def transform_single_pdf(pdf_path: str, output_dir: str) -> Optional[str]:
-    """Transform one PDF through the warm daemon.
+    """Transform one PDF by calling the transform microservice.
 
     Returns the absolute path to the produced .en.txt file, or None on failure.
     """
     os.makedirs(output_dir, exist_ok=True)
-    return _daemon.transform(pdf_path, output_dir)
+    pdf_name = os.path.basename(pdf_path)
+    
+    # Get the transform service URL from environment
+    service_url = os.getenv("TRANSFORM_SERVICE_URL", "http://127.0.0.1:8003/transform")
+    
+    logger.info(f"Sending {pdf_name} to transform service at {service_url}")
+    try:
+        with open(pdf_path, "rb") as f:
+            files = {"file": (pdf_name, f, "application/pdf")}
+            response = requests.post(service_url, files=files, timeout=300)
+            
+        if response.status_code == 200:
+            en_txt_content = response.text
+            
+            # Use the .en.txt naming convention expected downstream
+            if pdf_name.lower().endswith(".pdf"):
+                base_name = pdf_name[:-4]
+            else:
+                base_name = pdf_name
+                
+            # The downstream pipeline expects name.pdf.en.txt or name.en.txt.
+            # We match what the daemon previously produced: pdf_name + ".en.txt"
+            en_txt_dst = os.path.join(output_dir, pdf_name + ".en.txt")
+            
+            with open(en_txt_dst, "w", encoding="utf-8") as out_f:
+                out_f.write(en_txt_content)
+                
+            return os.path.abspath(en_txt_dst)
+        else:
+            logger.error(f"Transform service returned error: {response.status_code} - {response.text}")
+            return None
+    except Exception as exc:
+        logger.error(f"Failed to call transform service: {exc}")
+        return None
 
 
 def run_pdf_transform(
