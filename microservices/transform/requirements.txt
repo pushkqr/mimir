@@ -1,9 +1,18 @@
-fastapi
+# docint (below) hard-pins pydantic~=1.10 (Pydantic v1) in its own pyproject.toml. Modern
+# fastapi requires pydantic>=2.9.0, an unresolvable conflict with docint's pin - pip's
+# resolver fails with ResolutionImpossible if fastapi is left unpinned here. 0.99.1 is the
+# last fastapi release built against pydantic v1 (requires pydantic<2.0.0), so it satisfies
+# both. This is scoped to this one isolated microservice only - the rest of the app runs
+# modern fastapi in its own separate container and is unaffected.
+fastapi==0.99.1
 uvicorn
 python-multipart
 docint @ git+https://github.com/mukundesh/docInt.git
 vendor/orgpedia_mahwater2024-0.0.1.tar.gz
-orgpedia @ git+https://github.com/orgpedia/orgpedia.git@da91a2fd5dd056b243fe7b08fefd3571be5c304f
+# Previous pin (da91a2fd5dd056b243fe7b08fefd3571be5c304f) was mimir's own commit hash, not a
+# commit that exists in orgpedia/orgpedia - pip's git checkout failed on it every time. This
+# is that repo's actual current HEAD on main, verified via `git ls-remote`.
+orgpedia @ git+https://github.com/orgpedia/orgpedia.git@6ef4d7eb0cabc5d0720fcb624b720a7738d2e6b7
 indictranstokenizer @ git+https://github.com/orgpedia/IndicTransTokenizer.git
 translateindic @ git+https://github.com/orgpedia/translateIndic.git
 pytesseract>=0.3.10,<0.4
