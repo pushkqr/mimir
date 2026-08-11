@@ -6,6 +6,7 @@ from google import genai
 from ingestion.chunking import chunk_and_embed_circular, PartialEmbeddingError
 from ingestion.state import compute_file_hash, save_ingestion_state, should_skip_file
 from core.log_config import get_logger
+from core.schema import DEFAULT_DEPARTMENT
 from ingestion.metadata import extract_document_metadata
 
 logger = get_logger(__name__)
@@ -17,6 +18,7 @@ def run_orgpedia_ingestion(
     docs_dir: str = "docs/orgpedia_mahGRs",
     target_files: Optional[List[str]] = None,
     force_reingest: bool = False,
+    department: str = DEFAULT_DEPARTMENT,
 ) -> List[Dict[str, Any]]:
     """Process pre-translated OrgPedia .en.txt files, bypassing OCR and translation."""
     if target_files:
@@ -78,7 +80,8 @@ def run_orgpedia_ingestion(
             "source_filename": extracted_metadata.get("source_filename", filename),
             "supersedes": extracted_metadata.get("supersedes"),
             "references": extracted_metadata.get("references"),
-            "language": "en"
+            "language": "en",
+            "department": department,
         }
 
         # Chunk and embed using the English text directly.

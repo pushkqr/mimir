@@ -124,6 +124,7 @@
 
     <form id="newTok" class="mb-5 flex gap-2">
       <input id="newLabel" required placeholder="Officer name or designation" class="flex-1 rounded-xl border border-zinc-300 bg-white/50 px-4 py-2.5 text-sm transition focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700 dark:bg-zinc-900/50">
+      <select id="newDept" title="Department this officer can search" class="w-44 rounded-xl border border-zinc-300 bg-white/50 px-3 py-2.5 text-sm transition focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700 dark:bg-zinc-900/50"></select>
       <button class="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 dark:bg-amber-600 dark:hover:bg-amber-500">Issue Token</button>
     </form>
 
@@ -153,6 +154,7 @@
     </label>
 
     <div class="flex items-center gap-2">
+      <select id="ingestDept" title="Department this document belongs to" class="w-56 rounded-xl border border-zinc-300 bg-white/50 px-3 py-2.5 text-sm transition focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700 dark:bg-zinc-900/50"></select>
       <button id="ingestBtn" disabled class="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none dark:bg-amber-600 dark:hover:bg-amber-500">Upload &amp; Ingest</button>
       <span class="text-xs text-zinc-400">Typically 1 to 3 minutes per document</span>
     </div>
@@ -412,8 +414,21 @@
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let TOK=sessionStorage.getItem('mimir.admin')||'';
+let DEPTS=[],DEFAULT_DEPT='';
+const deptLabel=d=>d==='ALL'?'All departments':String(d).replace(/_/g,' ');
 
 const api=(p,o={})=>fetch(p,{...o,headers:{'Authorization':'Bearer '+TOK,...(o.body?{'Content-Type':'application/json'}:{}),...(o.headers||{})}});
+
+async function loadDepartments(){
+  try{
+    const d=await(await api('/api/admin/departments')).json();
+    DEPTS=d.departments||[];DEFAULT_DEPT=d.default||(DEPTS[0]||'');
+    const opts=DEPTS.map(x=>`<option value="${esc(x)}">${esc(deptLabel(x))}</option>`).join('');
+    $('newDept').innerHTML=opts;
+    $('ingestDept').innerHTML=opts;
+    if(DEFAULT_DEPT){$('newDept').value=DEFAULT_DEPT;$('ingestDept').value=DEFAULT_DEPT;}
+  }catch(_){}
+}
 
 /* ── gate ─────────────────────────────────────────────── */
 $('gateForm').onsubmit=async e=>{
@@ -430,7 +445,7 @@ $('gateForm').onsubmit=async e=>{
 
 $('lock').onclick=()=>{sessionStorage.removeItem('mimir.admin');location.reload();};
 
-function open_(){$('gate').classList.add('hidden');$('console').classList.remove('hidden');refresh();}
+async function open_(){$('gate').classList.add('hidden');$('console').classList.remove('hidden');await loadDepartments();refresh();}
 
 /* ── deployment topology ──────────────────────────────── */
 async function loadTopology(){
@@ -741,6 +756,7 @@ async function loadTokens(){
     const d=await(await api('/api/admin/tokens')).json();
     const list=d.tokens||[];
     if(!list.length){box.innerHTML='<p class="py-4 text-center text-sm text-zinc-400">No officers provisioned yet.</p>';return;}
+    const deptOpts=DEPTS.map(x=>`<option value="${esc(x)}">${esc(deptLabel(x))}</option>`).join('');
     box.innerHTML=list.map(t=>`
       <div class="fadein flex items-center gap-3 rounded-xl border border-zinc-200 bg-white/50 px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/40">
         <div class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-500/10 text-[11px] font-semibold text-amber-600 dark:text-amber-400">${esc((t.label||'?').trim().charAt(0).toUpperCase())}</div>
@@ -749,11 +765,19 @@ async function loadTokens(){
           <div class="mono truncate text-[11px] text-zinc-400">${esc(t.token_hash.slice(0,24))}...</div>
           <div class="truncate text-[11px] text-zinc-400">issued ${rel(t.created_at)} &middot; ${t.last_used_at?('last used '+rel(t.last_used_at)):'<span class="text-zinc-400">never used</span>'}</div>
         </div>
+        <select data-act="dept" data-h="${esc(t.token_hash)}" title="Department this token can search" class="w-40 shrink-0 rounded-lg border border-zinc-300 bg-white/50 px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">${deptOpts}</select>
         <button data-act="rename" data-h="${esc(t.token_hash)}" data-l="${esc(t.label||'')}" class="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Rename</button>
         <button data-act="revoke" data-h="${esc(t.token_hash)}" data-l="${esc(t.label||'')}" class="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs text-red-600 transition hover:border-red-500 dark:border-zinc-700 dark:text-red-400">Revoke</button>
       </div>`).join('');
+    list.forEach(t=>{const sel=box.querySelector(`select[data-h="${CSS.escape(t.token_hash)}"]`);if(sel)sel.value=t.department||DEFAULT_DEPT;});
   }catch(_){box.innerHTML='<p class="py-4 text-center text-sm text-red-500">Could not load officers.</p>';}
 }
+
+$('tokList').onchange=async e=>{
+  const sel=e.target.closest('select[data-act="dept"]');if(!sel)return;
+  await api('/api/admin/tokens/'+sel.dataset.h,{method:'PUT',body:JSON.stringify({department:sel.value})});
+  loadAudit();
+};
 
 $('tokList').onclick=async e=>{
   const b=e.target.closest('button[data-act]');if(!b)return;
@@ -772,9 +796,10 @@ $('tokList').onclick=async e=>{
 $('newTok').onsubmit=async e=>{
   e.preventDefault();
   const label=$('newLabel').value.trim();if(!label)return;
+  const department=$('newDept').value;
   const btn=e.target.querySelector('button'),og=btn.innerHTML;btn.innerHTML='Issuing...';btn.disabled=true;
   try{
-    const d=await(await api('/api/admin/tokens',{method:'POST',body:JSON.stringify({label})})).json();
+    const d=await(await api('/api/admin/tokens',{method:'POST',body:JSON.stringify({label,department})})).json();
     if(d.token){$('issuedTok').textContent=d.token;$('issued').classList.remove('hidden');$('newLabel').value='';}
   }finally{btn.innerHTML=og;btn.disabled=false;refresh();}
 };
@@ -806,7 +831,7 @@ $('ingestBtn').onclick=async()=>{
     const up=await(await fetch('/api/admin/upload',{method:'POST',headers:{'Authorization':'Bearer '+TOK},body:fd})).json();
     if(up.error)throw new Error(up.error);
     log(['Uploaded '+up.filename+' ('+Math.round(up.bytes/1024)+' KB)','Queuing for ingestion...']);
-    const st=await(await api('/api/admin/ingest',{method:'POST',body:JSON.stringify({filename:up.filename})})).json();
+    const st=await(await api('/api/admin/ingest',{method:'POST',body:JSON.stringify({filename:up.filename,department:$('ingestDept').value})})).json();
     if(st.error)throw new Error(st.error);
     btn.textContent='Ingesting...';poll();
   }catch(ex){

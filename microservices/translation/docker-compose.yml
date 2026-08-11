@@ -28,6 +28,24 @@ services:
     # The 1B ingestion instance runs on a larger host and must raise this (float16 weights
     # alone are ~2 GB), so it overrides TRANSLATE_MEM_LIMIT in its own .env.
     mem_limit: ${TRANSLATE_MEM_LIMIT:-1800m}
+    # GPU node: main.py already auto-detects CUDA (DEVICE = "cuda" if torch.cuda.is_available()
+    # else "cpu") - this was the missing half. Without it, deploy.py's tier detection can pick
+    # the larger 1B model *because* it sees a GPU, then that model runs on CPU anyway since
+    # nothing ever attached the device - slower than if it had picked the smaller 200M model
+    # in the first place. Comment out on a CPU-only host; the app falls back cleanly either way.
+    #
+    # As of this image build, torch.cuda.is_available() still reports False even with the
+    # device attached ("CUDA initialization: The NVIDIA driver on your system is too old
+    # (found version 12090)") - this image's pinned torch build predates this host's driver.
+    # The reservation is left in for when the image is rebuilt against a newer torch; until
+    # then this runs on CPU regardless, which is why TRANSLATION_TIMEOUT_S needs headroom.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     logging:
       driver: "json-file"
       options:

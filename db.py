@@ -6,6 +6,8 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
+from core.schema import DEFAULT_DEPARTMENT
+
 DB_PATH = "mimir_portal.db"
 
 
@@ -44,6 +46,13 @@ def init_db():
         c.execute("ALTER TABLE tokens ADD COLUMN created_at TEXT")
     if "last_used_at" not in existing:
         c.execute("ALTER TABLE tokens ADD COLUMN last_used_at TEXT")
+    if "department" not in existing:
+        c.execute("ALTER TABLE tokens ADD COLUMN department TEXT")
+        # Every token issued before this column existed was implicitly scoped to the
+        # reference deployment's own department - it was the only one in the system.
+        # Defaulting them here means department scoping is enforced for every existing
+        # token immediately, not just newly issued ones.
+        c.execute("UPDATE tokens SET department=? WHERE department IS NULL", (DEFAULT_DEPARTMENT,))
 
     # Append-only access log. Deliberately stores the token label and a short hash prefix
     # rather than the token itself, so the trail stays useful for answering "who saw what"
@@ -465,7 +474,7 @@ def get_history(user_id: str) -> list:
     return []
 
 
-def generate_officer_token(label: str) -> str:
+def generate_officer_token(label: str, department: str = DEFAULT_DEPARTMENT) -> str:
     """Generates a new token, hashes it, stores it, and returns the raw token."""
     raw_token = f"OFFICER-{secrets.token_hex(8).upper()}"
     t_hash = hash_token(raw_token)
@@ -473,8 +482,8 @@ def generate_officer_token(label: str) -> str:
     conn = _connect()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO tokens (token_hash, label, created_at) VALUES (?, ?, ?)",
-        (t_hash, label, _now()),
+        "INSERT INTO tokens (token_hash, label, created_at, department) VALUES (?, ?, ?, ?)",
+        (t_hash, label, _now(), department),
     )
     conn.commit()
     conn.close()
@@ -484,19 +493,43 @@ def generate_officer_token(label: str) -> str:
 def list_tokens() -> list:
     conn = _connect()
     c = conn.cursor()
-    c.execute("SELECT token_hash, label, created_at, last_used_at FROM tokens")
+    c.execute("SELECT token_hash, label, created_at, last_used_at, department FROM tokens")
     rows = c.fetchall()
     conn.close()
     return [
-        {"token_hash": r[0], "label": r[1], "created_at": r[2], "last_used_at": r[3]}
+        {"token_hash": r[0], "label": r[1], "created_at": r[2], "last_used_at": r[3], "department": r[4]}
         for r in rows
     ]
+
+
+def get_token_department(token: str) -> Optional[str]:
+    """Resolve a raw token to its department, so retrieval can filter by it.
+
+    None (unknown token, e.g. the legacy shared MIMIR_AUTH_TOKEN) means unrestricted - it
+    never has a row here, and there is nothing to scope it to.
+    """
+    conn = _connect()
+    c = conn.cursor()
+    c.execute("SELECT department FROM tokens WHERE token_hash=?", (hash_token(token),))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else None
 
 
 def update_token_label(token_hash: str, new_label: str) -> bool:
     conn = _connect()
     c = conn.cursor()
     c.execute("UPDATE tokens SET label=? WHERE token_hash=?", (new_label, token_hash))
+    rows_affected = c.rowcount
+    conn.commit()
+    conn.close()
+    return rows_affected > 0
+
+
+def update_token_department(token_hash: str, department: str) -> bool:
+    conn = _connect()
+    c = conn.cursor()
+    c.execute("UPDATE tokens SET department=? WHERE token_hash=?", (department, token_hash))
     rows_affected = c.rowcount
     conn.commit()
     conn.close()

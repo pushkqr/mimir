@@ -28,7 +28,10 @@ services:
     volumes:
       - ollama_models:/root/.ollama
     ports:
-      - "127.0.0.1:11434:11434"
+      # Host side deliberately not 11434 (Ollama's own default). Any bare `ollama serve`
+      # a teammate runs on this host claims 11434 with no prompt to change it, which
+      # collides with this container's port binding rather than the app.
+      - "127.0.0.1:11500:11434"
     logging:
       driver: "json-file"
       options:

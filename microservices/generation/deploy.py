@@ -21,12 +21,22 @@ model it serves. `deploy.py tier` reports the decision and changes nothing; `up`
       +gpu   or nvidia runtime present but SGLang unfit
     ollama   no usable GPU                                qwen3:1.7b, or 4b on a large host
 
-All three bind 127.0.0.1:11434 and speak /v1/chat/completions, so the application config is
-identical whichever is chosen and switching engines is not an application change.
+All three bind 127.0.0.1:11500 on the host (11434 inside the container - deliberately not
+11434 on the host, since that's Ollama's own default and collides with any bare `ollama
+serve` a teammate runs on a shared machine) and speak /v1/chat/completions, so the
+application config is identical whichever is chosen and switching engines is not an
+application change.
 
 The CPU tier is deliberately conservative. On four vCPUs qwen3:4b was measured at 17.5 tok/s
 prompt processing and 3.0 tok/s generation, which is not usable for interactive answers, so
 the 4b tier now needs real core count rather than merely enough RAM to hold the weights.
+
+qwen3:4b also failed to reliably produce the conflict-warning callout during a real
+deployment (see the officer portal's supersession-warning behaviour) - a model this small is
+not just slow, it is untrustworthy for that specific behaviour. gemma4:26b at
+reasoning_effort=low/none was the model that actually held up in practice, though it has not
+been broken into per-VRAM-tier Ollama tags here, so it is set as a manual LOCAL_GEN_MODEL
+override in the application's .env rather than wired into the tables below.
 
 Point the application at this service with GEN_PROVIDER=local, LOCAL_GEN_URL and
 LOCAL_GEN_MODEL matching what `deploy.py tier` reports (core/utils.py:local_generate_stream
@@ -35,7 +45,8 @@ speaks the standard /v1/chat/completions dialect, so any OpenAI-compatible serve
     python deploy.py check   # is docker available, is .env present, is a GPU usable
     python deploy.py tier    # report detected hardware and the engine/model it implies
     python deploy.py up      # start the chosen engine, then pull the tiered model
-    python deploy.py down
+    python deploy.py stop    # pause the container, keep it (fast to resume with `up`)
+    python deploy.py down    # stop and remove the container
     python deploy.py status
 """
 
@@ -52,9 +63,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SERVICE_NAME = "generation"
-# Ollama and SGLang both listen on 11434 but disagree about what a health probe looks like.
-HEALTH_URL_OLLAMA = "http://127.0.0.1:11434/api/tags"
-HEALTH_URL_SGLANG = "http://127.0.0.1:11434/v1/models"
+# Ollama and SGLang both publish on host port 11500 (see docker-compose*.yml) but disagree
+# about what a health probe looks like.
+HEALTH_URL_OLLAMA = "http://127.0.0.1:11500/api/tags"
+HEALTH_URL_SGLANG = "http://127.0.0.1:11500/v1/models"
 
 # SGLang's attention kernels require Turing or newer. Older datacentre cards (K80 3.7,
 # P100 6.0, V100 7.0) are common in university clusters and must fall back to Ollama, which
@@ -97,6 +109,10 @@ def _docker_available():
         return False, "docker CLI not found on PATH. Install Docker first."
     result = _run(["docker", "info"], capture_output=True, text=True)
     if result.returncode != 0:
+        if "permission denied" in result.stderr.lower():
+            return False, ("permission denied talking to the Docker socket. If this account was "
+                           "just added to the docker group, that only takes effect in new "
+                           "sessions - run `newgrp docker` or start a new login shell, then retry.")
         return False, "docker daemon not reachable. Is Docker running?"
     return True, "ok"
 
@@ -147,16 +163,22 @@ def detect_cpu_cores():
 
 
 def detect_gpus():
-    """Every CUDA GPU nvidia-smi can see, as {name, vram_mb, compute_capability}.
+    """Every CUDA GPU nvidia-smi can see, as {name, vram_total_mb, vram_free_mb, compute_capability}.
 
     Empty list means no usable GPU, whether because there is none, the driver is missing, or
     nvidia-smi failed. Callers treat all three the same way: use the CPU tier.
+
+    Tiering is done on vram_free_mb, not the card's total capacity: this machine is shared,
+    and nvidia-smi's memory.total does not know that another process (an already-running
+    Ollama instance, say) is holding a chunk of it. Tiering on total capacity picked a model
+    that needed more VRAM than was actually free and failed to load - the card looked capable
+    on paper while a third of it was already spoken for.
     """
     if shutil.which("nvidia-smi") is None:
         return []
     try:
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,memory.total,compute_cap",
+            ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,compute_cap",
              "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=10,
         )
@@ -168,38 +190,58 @@ def detect_gpus():
     gpus = []
     for line in result.stdout.strip().splitlines():
         parts = [p.strip() for p in line.split(",")]
-        if len(parts) < 2:
+        if len(parts) < 3:
             continue
         try:
-            vram = int(float(parts[1]))
+            vram_total = int(float(parts[1]))
+            vram_used = int(float(parts[2]))
         except ValueError:
             continue
         # compute_cap is absent on drivers older than 510; unknown means "assume too old
         # for SGLang" rather than "assume fine", so the fallback is the safe direction.
         try:
-            cc = float(parts[2]) if len(parts) > 2 and parts[2] not in ("", "[N/A]") else None
+            cc = float(parts[3]) if len(parts) > 3 and parts[3] not in ("", "[N/A]") else None
         except ValueError:
             cc = None
-        gpus.append({"name": parts[0], "vram_mb": vram, "compute_capability": cc})
+        gpus.append({
+            "name": parts[0],
+            "vram_total_mb": vram_total,
+            "vram_used_mb": vram_used,
+            "vram_free_mb": max(vram_total - vram_used, 0),
+            "compute_capability": cc,
+        })
     return gpus
 
 
 def docker_gpu_runtime_available():
-    """Whether Docker can actually hand a GPU to a container.
+    """Whether Docker can actually hand a GPU to a container, as (ok, reason).
 
     Distinct from "the host has a GPU": a machine can pass nvidia-smi on the host and still
     have no nvidia container runtime installed, in which case the container silently gets no
     device and runs a large tiered model on CPU. That failure is slow rather than loud, so it
     is worth a separate check.
+
+    A permission-denied `docker info` (stale group membership - see _docker_available) looks
+    identical to "no nvidia runtime" if not checked for separately, and sends the operator to
+    install nvidia-container-toolkit when the runtime was there all along and the real fix was
+    `newgrp docker`.
     """
     try:
         result = subprocess.run(
             ["docker", "info", "--format", "{{json .Runtimes}}"],
             capture_output=True, text=True, timeout=15,
         )
-        return result.returncode == 0 and "nvidia" in result.stdout.lower()
-    except Exception:
-        return False
+        if result.returncode != 0:
+            if "permission denied" in result.stderr.lower():
+                return False, ("permission denied talking to the Docker socket, not confirmed "
+                               "missing - run `newgrp docker` or start a new login shell, then "
+                               "re-check")
+            return False, "docker info failed"
+        if "nvidia" not in result.stdout.lower():
+            return False, "no nvidia runtime registered with Docker"
+        return True, "ok"
+    except Exception as exc:
+        return False, str(exc)
 
 
 def _pick(tiers, vram_mb):
@@ -217,18 +259,36 @@ def detect_plan():
     warnings = []
 
     if gpus:
-        vram = min(g["vram_mb"] for g in gpus)
+        vram_free = min(g["vram_free_mb"] for g in gpus)
+        vram_total = min(g["vram_total_mb"] for g in gpus)
         caps = [g["compute_capability"] for g in gpus]
         worst_cap = None if any(c is None for c in caps) else min(caps)
         names = ", ".join(sorted({g["name"] for g in gpus}))
-        runtime_ok = docker_gpu_runtime_available()
+        runtime_ok, runtime_reason = docker_gpu_runtime_available()
+
+        # More than a driver's worth of VRAM already gone means something else - another
+        # Ollama instance, a display server, another team's job - is holding the card. Tier
+        # on what's actually free, not the card's total capacity, or the picked model has
+        # nowhere to load and fails at startup while the card looks capable on paper.
+        if vram_total - vram_free > 1024:
+            warnings.append(
+                f"{vram_total - vram_free} MB of {vram_total} MB VRAM is already in use by "
+                f"another process (this is a shared machine?) - tiering on the {vram_free} MB "
+                "actually free, not the card's total capacity."
+            )
 
         if not runtime_ok:
-            warnings.append(
-                "nvidia-smi sees a GPU but Docker has no nvidia runtime, so a container "
-                "would get no device and run on CPU. Install nvidia-container-toolkit, then "
-                "re-run. Falling back to the CPU tier for now."
-            )
+            if "permission denied" in runtime_reason.lower():
+                warnings.append(
+                    f"Could not confirm the nvidia runtime: {runtime_reason}. Falling back to "
+                    "the CPU tier for now - this is likely a false negative, not a missing runtime."
+                )
+            else:
+                warnings.append(
+                    "nvidia-smi sees a GPU but Docker has no nvidia runtime, so a container "
+                    "would get no device and run on CPU. Install nvidia-container-toolkit, then "
+                    "re-run. Falling back to the CPU tier for now."
+                )
         elif worst_cap is None:
             warnings.append(
                 "GPU compute capability could not be read (driver older than 510?). "
@@ -244,8 +304,8 @@ def detect_plan():
                     )
                 return {
                     "engine": "sglang",
-                    "model": _pick(SGLANG_TIERS, vram),
-                    "reason": f"{names}, {vram} MB VRAM, compute capability {worst_cap}",
+                    "model": _pick(SGLANG_TIERS, vram_free),
+                    "reason": f"{names}, {vram_free} MB VRAM free of {vram_total} MB, compute capability {worst_cap}",
                     "warnings": warnings,
                     "compose_files": ["-f", "docker-compose.sglang.yml"],
                     "health_url": HEALTH_URL_SGLANG,
@@ -254,8 +314,8 @@ def detect_plan():
             cap_desc = "unknown" if worst_cap is None else str(worst_cap)
             return {
                 "engine": "ollama+gpu",
-                "model": _pick(OLLAMA_GPU_TIERS, vram),
-                "reason": (f"{names}, {vram} MB VRAM, compute capability {cap_desc} "
+                "model": _pick(OLLAMA_GPU_TIERS, vram_free),
+                "reason": (f"{names}, {vram_free} MB VRAM free of {vram_total} MB, compute capability {cap_desc} "
                            f"(below SGLang's {SGLANG_MIN_COMPUTE_CAPABILITY})"),
                 "warnings": warnings,
                 "compose_files": ["-f", "docker-compose.yml", "-f", "docker-compose.gpu.yml"],
@@ -341,10 +401,11 @@ def cmd_check(_args):
     if not gpus:
         print("gpu         : none detected, CPU tier")
     else:
-        runtime = "yes" if docker_gpu_runtime_available() else "NO - install nvidia-container-toolkit"
+        runtime_ok, runtime_reason = docker_gpu_runtime_available()
+        runtime = "yes" if runtime_ok else f"NO - {runtime_reason}"
         for gpu in gpus:
             cap = gpu["compute_capability"]
-            print(f"gpu         : {gpu['name']}, {gpu['vram_mb']} MB, "
+            print(f"gpu         : {gpu['name']}, {gpu['vram_free_mb']} MB free of {gpu['vram_total_mb']} MB, "
                   f"compute capability {cap if cap is not None else 'unknown'}")
         print(f"docker gpu  : {runtime}")
     return 0 if (ok_docker and ok_env) else 1
@@ -411,8 +472,13 @@ def cmd_up(_args):
             return pull.returncode
 
     print(f"{model} ready on {plan['engine']}. Point the application at GEN_PROVIDER=local, "
-          f"LOCAL_GEN_URL=http://<this-host>:11434/v1, LOCAL_GEN_MODEL={model}")
+          f"LOCAL_GEN_URL=http://<this-host>:11500/v1, LOCAL_GEN_MODEL={model}")
     return 0
+
+
+def cmd_stop(_args):
+    """Pause the container without removing it - a later `up` just restarts it, no rebuild."""
+    return _run(["docker", "compose"] + detect_plan()["compose_files"] + ["stop"]).returncode
 
 
 def cmd_down(_args):
@@ -443,11 +509,12 @@ def main():
     tier_parser.add_argument("--model-only", action="store_true",
                              help="Print just the model name, for scripts.")
     sub.add_parser("up", help="Start the service and pull the tiered model.")
-    sub.add_parser("down", help="Stop the service.")
+    sub.add_parser("stop", help="Pause the container, keep it - a later `up` just restarts it.")
+    sub.add_parser("down", help="Stop the service and remove its container.")
     sub.add_parser("status", help="Check whether it is reachable right now.")
     args = parser.parse_args()
 
-    handlers = {"check": cmd_check, "tier": cmd_tier, "up": cmd_up, "down": cmd_down, "status": cmd_status}
+    handlers = {"check": cmd_check, "tier": cmd_tier, "up": cmd_up, "stop": cmd_stop, "down": cmd_down, "status": cmd_status}
     sys.exit(handlers[args.command](args))
 
 

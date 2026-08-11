@@ -95,7 +95,7 @@ def probe_translation() -> str:
 def probe_generation(cerebras_client: Optional[Any] = None) -> str:
     local_gen = deployment.gen_provider() == "local"
     if local_gen:
-        gen_url = os.getenv("LOCAL_GEN_URL", "http://localhost:11434/v1")
+        gen_url = os.getenv("LOCAL_GEN_URL", "http://localhost:11500/v1")
         r = requests.get(f"{gen_url.rstrip('/')}/models", headers=_service_headers("LOCAL_GEN_API_KEY"), timeout=8)
         r.raise_for_status()
         return os.getenv("LOCAL_GEN_MODEL", "qwen3:4b")
@@ -113,7 +113,7 @@ def component_list(weaviate_client: Optional[Any] = None, cerebras_client: Optio
     """The six components with their probe functions attached (under the 'fn' key, popped by
     the caller before the result is serialized)."""
     local_gen = deployment.gen_provider() == "local"
-    gen_url = os.getenv("LOCAL_GEN_URL", "http://localhost:11434/v1")
+    gen_url = os.getenv("LOCAL_GEN_URL", "http://localhost:11500/v1")
 
     return [
         {"name": "Vector store", "tech": "Weaviate", "role": "Hybrid dense + BM25 search",

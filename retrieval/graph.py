@@ -42,8 +42,12 @@ _STEM_RE = re.compile(r"([A-Za-zऀ-ॿ]{3,})[\s-]*[-–]\s*(\d{4})")
 
 
 # Titles come from the first markdown heading, which for OCR'd scans is very often the page
-# marker rather than the subject line. Those make useless node labels.
-_JUNK_TITLE_RE = re.compile(r"^\s*(page\s*\d+|#+\s*)?\s*$", re.IGNORECASE)
+# marker rather than the subject line, a generic section header ("Preamble:", "Subject:"), or
+# a heading truncated mid-word ("Narrow-", "Validation-"). Those make useless node labels -
+# seen live in the citation graph as edges labelled "Preamble:" or "Narrow-" instead of a real
+# document name. A short fragment ending in a colon or hyphen is never a real GR title, which
+# reads as a full descriptive phrase.
+_JUNK_TITLE_RE = re.compile(r"^\s*(page\s*\d+|#+\s*)?\s*$|^.{2,24}[:\-]\s*$", re.IGNORECASE)
 
 
 def _pick_label(props: dict, filename: str) -> str:

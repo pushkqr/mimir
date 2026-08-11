@@ -1,7 +1,9 @@
 fastapi
 uvicorn
 pydantic
-torch
+# torch is installed separately in the Dockerfile, pinned to a CUDA-12.1 build via PyTorch's
+# own index - do not add a bare `torch` line here, it would reinstall an unpinned (and
+# possibly CUDA-incompatible) build on top of the pinned one.
 # IndicTransToolkit's collator imports transformers.tokenization_utils.PreTrainedTokenizerBase,
 # which transformers 5.x removed/relocated. Pin below that break.
 transformers==4.46.3

@@ -24,6 +24,8 @@ want to see each step:
     python deploy.py check               # prerequisites, hardware, per-service readiness
     python deploy.py up                  # bring every service up, in order, then the app
     python deploy.py up --only weaviate  # just one service
+    python deploy.py stop                # pause everything, keep containers (fast to resume with `up`)
+    python deploy.py stop --only weaviate  # just one service
     python deploy.py down                # tear everything down, reverse order
     python deploy.py status              # live reachability, same probes as the admin panel
     python deploy.py config              # required values, values that must agree, what services report
@@ -61,7 +63,9 @@ SERVICE_PORTS = {
     "embeddings": 7997,
     "translation": 8001,
     "docling": 8002,
-    "generation": 11434,
+    # Not 11434 (Ollama's own default): any bare `ollama serve` a teammate runs on a shared
+    # host claims that port with no prompt to change it, colliding with this container.
+    "generation": 11500,
 }
 
 # Values that ship in the .env.example files and mean "not configured yet". init overwrites
@@ -379,8 +383,14 @@ def cmd_check(_args):
             print("  docker      : OK")
         else:
             docker_ok = False
-            print("  docker      : installed but the daemon is not reachable")
-            print(f"                try: sudo systemctl enable --now docker")
+            if "permission denied" in daemon.stderr.lower():
+                print("  docker      : permission denied talking to the Docker socket")
+                print("                if this account was just added to the docker group, that only")
+                print("                takes effect in new sessions - try: newgrp docker")
+                print("                (or start a new login shell), then re-run this check")
+            else:
+                print("  docker      : installed but the daemon is not reachable")
+                print(f"                try: sudo systemctl enable --now docker")
     else:
         print("  docker      : MISSING")
         print(f"                install with: {_docker_install_hint()}")
@@ -461,6 +471,24 @@ def cmd_up(args):
           "the application can actually reach each one (network policy, firewall, etc. can "
           "still block a service that Docker itself reports as running).")
     return 0
+
+
+def cmd_stop(args):
+    """Pause containers without removing them - unlike `down`, a later `up` just restarts
+    them (no rebuild, no re-pull). Use this to free RAM/VRAM/CPU between sessions without
+    losing the running configuration, e.g. while another process on the same host needs the
+    memory back."""
+    if not args.only:
+        print("=== application ===")
+        subprocess.run(["docker", "compose", "stop"], cwd=REPO_ROOT)
+
+    targets = [args.only] if args.only else list(reversed(SERVICE_ORDER))
+    all_ok = True
+    for name in targets:
+        print(f"\n=== {name} ===")
+        rc = _run_service_script(name, "stop")
+        all_ok = all_ok and (rc == 0)
+    return 0 if all_ok else 1
 
 
 def cmd_down(args):
@@ -581,6 +609,9 @@ def main():
     up_parser.add_argument("--no-init", action="store_true",
                            help="Fail rather than generating missing .env files.")
 
+    stop_parser = sub.add_parser("stop", help="Pause every container, keep them - a later `up` just restarts.")
+    stop_parser.add_argument("--only", choices=SERVICE_ORDER + OPTIONAL_SERVICES, help="Pause just one service.")
+
     down_parser = sub.add_parser("down", help="Tear everything down, reverse order.")
     down_parser.add_argument("--only", choices=SERVICE_ORDER + OPTIONAL_SERVICES, help="Tear down just one service.")
 
@@ -595,7 +626,7 @@ def main():
     logs_parser.add_argument("name", choices=SERVICE_ORDER + OPTIONAL_SERVICES)
 
     args = parser.parse_args()
-    handlers = {"init": cmd_init, "check": cmd_check, "up": cmd_up, "down": cmd_down,
+    handlers = {"init": cmd_init, "check": cmd_check, "up": cmd_up, "stop": cmd_stop, "down": cmd_down,
                 "status": cmd_status, "config": cmd_config, "logs": cmd_logs}
     sys.exit(handlers[args.command](args))
 

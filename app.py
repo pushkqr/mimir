@@ -24,7 +24,10 @@ import weaviate.classes as wvc
 from core.utils import get_genai_client, get_cerebras_client, get_weaviate_client
 from retrieval import run_retrieval
 from retrieval.graph import build_citation_graph, load_citation_graph
-from core.schema import ensure_collection, CORPUS_COLLECTION, QUARANTINE_COLLECTION
+from core.schema import (
+    ensure_collection, ensure_department_property, CORPUS_COLLECTION, QUARANTINE_COLLECTION,
+    DEPARTMENTS, DEFAULT_DEPARTMENT,
+)
 
 # Single source of truth for which collection is "the corpus" right now. Previously "GovDocs"
 # was hardcoded at five separate call sites in this file; flipping to a differently-named
@@ -33,7 +36,7 @@ from core.schema import ensure_collection, CORPUS_COLLECTION, QUARANTINE_COLLECT
 ACTIVE_COLLECTION = os.environ.get("CORPUS_COLLECTION", CORPUS_COLLECTION).strip() or CORPUS_COLLECTION
 from db import (
     init_db, validate_token, save_history, get_history,
-    record_audit, touch_token, get_token_label, list_audit, audit_summary,
+    record_audit, touch_token, get_token_label, get_token_department, list_audit, audit_summary,
     record_feedback, list_feedback, feedback_summary, import_legacy_feedback,
     record_query_outcome, list_gaps, gaps_summary, query_analytics,
 )
@@ -109,22 +112,26 @@ async def _auth_gate(request: Request, call_next):
     path = request.url.path
     is_admin_api = path.startswith("/api/admin/")
 
-    # The network gate applies to admin routes too. Admin endpoints verify the admin token
-    # themselves, so they skip the officer-token check below, but exempting them from the
-    # subnet allowlist would have left a hole in the zero-trust perimeter.
-    if path not in _AUTH_OPEN or is_admin_api:
-        x_forwarded_for = request.headers.get("x-forwarded-for")
-        if x_forwarded_for:
-            client_host = x_forwarded_for.split(",")[0].strip()
-        else:
-            client_host = request.client.host if request.client else ""
+    # The network gate is the outermost control, so it runs on every path - including the
+    # login page and the admin console, and regardless of _AUTH_OPEN. A device outside the
+    # permitted range should never be served the form, let alone get to submit a credential
+    # to it; being allowed to reach the door and refused at it is the weaker perimeter.
+    # /health is the sole exception, so liveness probes and scratch/preflight.py keep
+    # working; it discloses nothing beyond whether the process is up.
+    x_forwarded_for = request.headers.get("x-forwarded-for")
+    if x_forwarded_for:
+        client_host = x_forwarded_for.split(",")[0].strip()
+    else:
+        client_host = request.client.host if request.client else ""
 
+    if path != "/health":
         if not _is_in_authorized_subnet(client_host):
             record_audit("auth.denied", ip=client_host, detail=f"subnet block on {path}")
             return JSONResponse({
                 "detail": "Network Access Denied. Device is outside authorized government intranet."
             }, status_code=403)
 
+    if path not in _AUTH_OPEN or is_admin_api:
         if _AUTH_TOKEN and not is_admin_api:
             if not _is_authenticated(request):
                 record_audit("auth.denied", ip=client_host, detail=f"invalid token on {path}")
@@ -149,6 +156,8 @@ async def startup_event():
         gemini_client = get_genai_client()
         cerebras_client = get_cerebras_client()
         weaviate_client = get_weaviate_client()
+        ensure_department_property(weaviate_client, ACTIVE_COLLECTION)
+        ensure_department_property(weaviate_client, QUARANTINE_COLLECTION)
         logger.info("Clients initialized successfully.")
     except Exception as e:
         logger.error(f"Error initializing clients: {e}")
@@ -207,6 +216,15 @@ async def api_get_history(request: Request, user_id: str = None):
 
 class TokenCreateRequest(BaseModel):
     label: str
+    department: str = DEFAULT_DEPARTMENT
+
+@app.get("/api/admin/departments")
+async def api_admin_departments(request: Request):
+    if not _is_admin(request):
+        return _FORBIDDEN
+    # Single source of truth is core.schema.DEPARTMENTS - the admin UI's dropdown is
+    # generated from this response rather than hardcoding the list a second time in HTML.
+    return {"departments": sorted(DEPARTMENTS - {"ALL"}), "all": "ALL", "default": DEFAULT_DEPARTMENT}
 
 @app.get("/api/admin/tokens")
 async def api_admin_list_tokens(request: Request):
@@ -221,25 +239,38 @@ async def api_admin_create_token(req: TokenCreateRequest, request: Request):
     h = request.headers.get("authorization", "")
     if not h.startswith("Bearer ") or h[len("Bearer "):].strip() != _ADMIN_TOKEN:
         return JSONResponse({"error": "Admin access required."}, status_code=403)
-        
+    if req.department not in DEPARTMENTS:
+        return JSONResponse({"error": f"Unknown department '{req.department}'."}, status_code=400)
+
     from db import generate_officer_token
-    new_token = generate_officer_token(req.label)
+    new_token = generate_officer_token(req.label, req.department)
     record_audit("token.issued", actor="Administrator", ip=_client_ip(request),
-                 detail=f"issued token for '{req.label}'")
-    return {"token": new_token, "label": req.label}
+                 detail=f"issued token for '{req.label}' ({req.department})")
+    return {"token": new_token, "label": req.label, "department": req.department}
 
 class TokenUpdateRequest(BaseModel):
-    label: str
+    label: Optional[str] = None
+    department: Optional[str] = None
 
 @app.put("/api/admin/tokens/{token_hash}")
 async def api_admin_update_token(token_hash: str, req: TokenUpdateRequest, request: Request):
     h = request.headers.get("authorization", "")
     if not h.startswith("Bearer ") or h[len("Bearer "):].strip() != _ADMIN_TOKEN:
         return JSONResponse({"error": "Admin access required."}, status_code=403)
-    from db import update_token_label
-    if update_token_label(token_hash, req.label):
+    if req.department is not None and req.department not in DEPARTMENTS:
+        return JSONResponse({"error": f"Unknown department '{req.department}'."}, status_code=400)
+
+    from db import update_token_label, update_token_department
+    found = False
+    if req.label is not None and update_token_label(token_hash, req.label):
+        found = True
         record_audit("token.renamed", actor="Administrator", ip=_client_ip(request),
                      detail=f"{token_hash[:12]} renamed to '{req.label}'")
+    if req.department is not None and update_token_department(token_hash, req.department):
+        found = True
+        record_audit("token.department_changed", actor="Administrator", ip=_client_ip(request),
+                     detail=f"{token_hash[:12]} moved to '{req.department}'")
+    if found:
         return {"status": "ok"}
     return JSONResponse({"error": "Token not found."}, status_code=404)
 
@@ -357,7 +388,7 @@ async def api_admin_topology(request: Request):
 _CHUNK_PROPERTIES = [
     "translated_text", "child_text", "parent_context", "document_title",
     "doc_number", "year", "issuing_authority", "document_category",
-    "source_filename", "supersedes", "references",
+    "source_filename", "supersedes", "references", "department",
 ]
 
 
@@ -513,20 +544,22 @@ async def api_admin_upload(request: Request, file: UploadFile = File(...)):
     return {"filename": name, "bytes": len(data), "staged": "quarantine"}
 
 
-def _ingest_job(filename: str):
+def _ingest_job(filename: str, department: str):
     _ingest.update(running=True, file=filename, log=[f"Starting ingestion of {filename} into quarantine"],
                    error=None, finished_at=None)
     try:
         from ingestion import run_ingestion
         ensure_collection(weaviate_client, QUARANTINE_COLLECTION)
+        ensure_department_property(weaviate_client, QUARANTINE_COLLECTION)
         records = run_ingestion(
             gemini_client,
             weaviate_client=weaviate_client,
             collection_name=QUARANTINE_COLLECTION,
             docs_dir=str(QUARANTINE_DIR),
             target_files=[filename],
+            department=department,
         )
-        _ingest["log"].append(f"Indexed {len(records)} chunks from {filename} into quarantine")
+        _ingest["log"].append(f"Indexed {len(records)} chunks from {filename} into quarantine ({department})")
         _ingest["log"].append("Review it, then Promote to add it to the live corpus.")
     except Exception as e:
         logger.error(f"Ingestion failed for {filename}: {e}")
@@ -539,21 +572,24 @@ def _ingest_job(filename: str):
 
 class IngestRequest(BaseModel):
     filename: str
+    department: str = DEFAULT_DEPARTMENT
 
 
 @app.post("/api/admin/ingest")
 async def api_admin_ingest(req: IngestRequest, request: Request):
     if not _is_admin(request):
         return _FORBIDDEN
+    if req.department not in DEPARTMENTS or req.department == "ALL":
+        return JSONResponse({"error": f"Invalid department '{req.department}'."}, status_code=400)
     if _ingest["running"]:
         return JSONResponse({"error": f"Ingestion already running for {_ingest['file']}."}, status_code=409)
     name = os.path.basename(req.filename or "").strip()
     if not (QUARANTINE_DIR / name).is_file():
         return JSONResponse({"error": f"{name} not found in quarantine."}, status_code=404)
     record_audit("document.ingested", actor="Administrator", ip=_client_ip(request),
-                 detail=f"ingestion started for {name} (quarantine)")
-    threading.Thread(target=_ingest_job, args=(name,), daemon=True).start()
-    return {"status": "started", "filename": name}
+                 detail=f"ingestion started for {name} (quarantine, {req.department})")
+    threading.Thread(target=_ingest_job, args=(name, req.department), daemon=True).start()
+    return {"status": "started", "filename": name, "department": req.department}
 
 
 @app.get("/api/admin/ingest/status")
@@ -579,7 +615,18 @@ async def api_admin_documents(request: Request):
 
 @app.get("/health")
 async def health():
-    return {"auth": bool(_AUTH_TOKEN), "demo": False, "ready": True}
+    local_gen = deployment.gen_provider() == "local"
+    return {
+        "auth": bool(_AUTH_TOKEN),
+        "demo": False,
+        "ready": True,
+        "sovereign": deployment.current_mode() == "sovereign",
+        "llm": {
+            "label": (os.getenv("LOCAL_GEN_MODEL", "qwen3:4b") if local_gen
+                     else os.getenv("CEREBRAS_MODELS", "gpt-oss-120b,gemma-4-31b").split(",")[0]),
+            "local": local_gen,
+        },
+    }
 
 @app.get("/workspaces")
 async def workspaces():
@@ -664,6 +711,51 @@ class AskRequest(BaseModel):
     history: List[Dict[str, Any]] = []
     workspace: Optional[str] = "default"
 
+def _repair_callout_prefixes(stream):
+    """Restore the '> ' blockquote prefixes on a leading [!WARNING] callout.
+
+    The conflict callout only renders as a styled box if every line starts with '> '. Smaller
+    local models (gemma3:12b measured at 0/3) reproduce the block's content and drop the
+    prefixes, which degrades the most important answer in the product to plain text. Prompt
+    emphasis did not fix it, so repair it deterministically instead.
+
+    Only the opening block is buffered, and only when the answer actually starts with the
+    marker; everything else streams through untouched.
+    """
+    buf = ""
+    deciding = True
+    for chunk in stream:
+        if not deciding:
+            yield chunk
+            continue
+        buf += chunk
+        stripped = buf.lstrip()
+        # Not a callout: flush and stop inspecting. Wait for a full first line before deciding,
+        # otherwise a marker split across chunks looks like a miss.
+        if stripped and not "[!WARNING]".startswith(stripped[:10]) and not stripped.startswith("[!WARNING]"):
+            deciding = False
+            yield buf
+            buf = ""
+            continue
+        if "\n\n" in stripped:
+            block, _, rest = stripped.partition("\n\n")
+            fixed = "\n".join(
+                ln if ln.lstrip().startswith(">") else "> " + ln
+                for ln in block.split("\n") if ln.strip()
+            )
+            deciding = False
+            yield fixed + "\n\n" + rest
+            buf = ""
+    if buf:
+        stripped = buf.lstrip()
+        if stripped.startswith("[!WARNING]"):
+            buf = "\n".join(
+                ln if ln.lstrip().startswith(">") else "> " + ln
+                for ln in stripped.split("\n") if ln.strip()
+            )
+        yield buf
+
+
 @app.post("/ask-stream")
 async def ask_stream(request: Request):
     data = await request.json()
@@ -675,6 +767,7 @@ async def ask_stream(request: Request):
 
     # Logged before retrieval runs, so an interrupted or failed query still leaves a trace.
     _token = _bearer(request)
+    _department = get_token_department(_token) if _token else None
     record_audit("query", actor=(get_token_label(_token) if _token else None),
                  ip=_client_ip(request), token=(_token or None), detail=query)
 
@@ -707,7 +800,8 @@ async def ask_stream(request: Request):
                     query=query,
                     collection_name=ACTIVE_COLLECTION,
                     chat_history=formatted_history,
-                    status_callback=sync_status
+                    status_callback=sync_status,
+                    department=_department,
                 )
             )
 
@@ -738,7 +832,7 @@ async def ask_stream(request: Request):
             first_token_at = None
             full_answer = []
             if answer_stream:
-                for chunk in answer_stream:
+                for chunk in _repair_callout_prefixes(answer_stream):
                     if first_token_at is None:
                         first_token_at = time.perf_counter()
                     full_answer.append(chunk)

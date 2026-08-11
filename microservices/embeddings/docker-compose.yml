@@ -24,15 +24,16 @@ services:
       options:
         max-size: "50m"
         max-file: "3"
-    # Runs on CPU as written. Uncomment for a GPU node; expect roughly an order of magnitude
-    # improvement on rerank latency, which is the dominant cost in a query.
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    # GPU node: this deployment's card was sitting mostly idle during bulk ingestion, with
+    # embeddings running on CPU the whole time. Expect roughly an order of magnitude
+    # improvement on rerank latency (the dominant cost in a query) and on ingestion throughput.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
 volumes:
   model_cache:

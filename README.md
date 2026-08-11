@@ -300,7 +300,7 @@ Then point the application at it with `python deploy.py init --host <node>`. Not
 | `microservices/weaviate` | 8080, 50051 | Weaviate vector store |
 | `microservices/embeddings` | 7997 | BGE-M3 and the cross-encoder reranker via Infinity |
 | `microservices/translation` | 8001 | IndicTrans2 (200M for queries, 1B for ingestion) |
-| `microservices/generation` | 11434 | Ollama, model tier chosen from detected hardware |
+| `microservices/generation` | 11500 | Ollama, model tier chosen from detected hardware |
 | `microservices/docling` | 8002 | Docling PDF OCR |
 
 The generation service picks its model from available memory and VRAM (`python deploy.py tier` reports the choice). The embedding model is deliberately **not** configurable: every stored vector is 1024-dimensional, and changing the model makes the existing index unreadable without a full re-ingest.
@@ -422,7 +422,7 @@ EMBED_BATCH_SIZE=64
 LOCAL_EMBED_BATCH_TIMEOUT_S=60
 
 # Generation (sovereign)
-LOCAL_GEN_URL=http://<generation-host>:11434/v1
+LOCAL_GEN_URL=http://<generation-host>:11500/v1
 LOCAL_GEN_MODEL=qwen3:4b
 
 # Translation. The ingestion service points at the larger 1B model.

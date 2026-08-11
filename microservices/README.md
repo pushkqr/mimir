@@ -85,8 +85,10 @@ not the right engine on a CPU:
 | Ollama + GPU | CUDA GPU older than 7.5 (K80, P100, V100) | `qwen3:1.7b` through `30b` by VRAM |
 | Ollama | no usable GPU | `qwen3:1.7b`, or `4b` given 16+ cores |
 
-All three bind `127.0.0.1:11434` and speak `/v1/chat/completions`, so `LOCAL_GEN_URL` does not
-change with the engine and switching is not an application change. Compute capability 7.5 is
+All three bind `127.0.0.1:11500` on the host (not Ollama's own default of 11434, which
+collides with any bare `ollama serve` a teammate runs on a shared machine) and speak
+`/v1/chat/completions`, so `LOCAL_GEN_URL` does not change with the engine and switching is
+not an application change. Compute capability 7.5 is
 SGLang's floor, which excludes several cards still common in university clusters; those get
 Ollama with the device attached rather than a failure.
 

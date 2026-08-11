@@ -160,6 +160,7 @@ def expand_lineage(
     bm25_query: str,
     max_docs: int = 2,
     max_chunks_per_doc: int = 3,
+    department: Optional[str] = None,
 ) -> List[Any]:
     """Follow supersedes edges so both sides of an amendment reach the generator.
 
@@ -192,8 +193,11 @@ def expand_lineage(
     candidates = [d for d in present if d][:10]
     if candidates:
         try:
+            back_filters = wvc.query.Filter.by_property("supersedes").contains_any(candidates)
+            if department and department != "ALL":
+                back_filters = back_filters & wvc.query.Filter.by_property("department").equal(department)
             back = weaviate_collection.query.fetch_objects(
-                filters=wvc.query.Filter.by_property("supersedes").contains_any(candidates),
+                filters=back_filters,
                 limit=10,
                 return_properties=["doc_number", "supersedes"],
             )
@@ -218,13 +222,16 @@ def expand_lineage(
     extra: List[Any] = []
     for target in sorted(targets)[:max_docs]:
         try:
+            linked_filters = wvc.query.Filter.by_property("doc_number").equal(target)
+            if department and department != "ALL":
+                linked_filters = linked_filters & wvc.query.Filter.by_property("department").equal(department)
             linked = weaviate_collection.query.hybrid(
                 query=bm25_query,
                 query_properties=["translated_text", "parent_context", "section_title", "child_text"],
                 vector=query_vector,
                 alpha=0.5,
                 limit=max_chunks_per_doc,
-                filters=wvc.query.Filter.by_property("doc_number").equal(target),
+                filters=linked_filters,
                 return_metadata=wvc.query.MetadataQuery(score=True),
             )
             added = 0
@@ -319,6 +326,7 @@ def run_hybrid_search(
     collection_name: str,
     year_filter: Optional[int],
     fast_mode: bool,
+    department: Optional[str] = None,
 ) -> Tuple[List[Any], List[Any], List[Dict[str, Any]]]:
     """Execute hybrid dense+BM25 search with RRF fusion, optional reranking, and evidence extraction."""
     limit = int(os.getenv("FAST_MODE_CANDIDATE_LIMIT", "100")) if fast_mode else int(os.getenv("DEEP_MODE_CANDIDATE_LIMIT", "150"))
@@ -344,7 +352,11 @@ def run_hybrid_search(
     weaviate_filters = None
     if year_filter:
         weaviate_filters = wvc.query.Filter.by_property("year").equal(year_filter)
-    
+    # "ALL" is the supervisor/cross-department sentinel - deliberately not filtered.
+    if department and department != "ALL":
+        dept_filter = wvc.query.Filter.by_property("department").equal(department)
+        weaviate_filters = dept_filter if weaviate_filters is None else weaviate_filters & dept_filter
+
     t_hybrid_start = time.time()
     search_res = weaviate_collection.query.hybrid(
         query=bm25_query,
@@ -379,7 +391,7 @@ def run_hybrid_search(
     rerank_s = time.time() - t_rerank_start
 
     t_lineage_start = time.time()
-    lineage_results = expand_lineage(weaviate_collection, top_results, query_vector, bm25_query)
+    lineage_results = expand_lineage(weaviate_collection, top_results, query_vector, bm25_query, department=department)
     if lineage_results:
         top_results = top_results + lineage_results
     lineage_s = time.time() - t_lineage_start
@@ -398,6 +410,7 @@ def execute_search_tool(
     query: str,
     year: Optional[int] = None,
     fast_mode: bool = True,
+    department: Optional[str] = None,
 ) -> Tuple[str, List[Dict[str, Any]], Dict[str, float], List[Dict[str, Any]]]:
     """Execute the search tool and format results for the LLM."""
     t_start = time.time()
@@ -478,7 +491,7 @@ def execute_search_tool(
     t_weaviate_start = time.time()
     search_results, top_results, evidence, search_profile = run_hybrid_search(
         gemini_client, weaviate_client, query_vectors, query_variations,
-        search_query, collection_name, year, fast_mode
+        search_query, collection_name, year, fast_mode, department
     )
     t_weaviate = time.time()
     logger.info(f"[PROFILING] Hybrid Search took: {t_weaviate - t_weaviate_start:.3f}s")
@@ -496,6 +509,7 @@ def execute_search_tool(
         "hybrid_db_s": search_profile.get("hybrid_db_s", 0.0),
         "rerank_s": search_profile.get("rerank_s", 0.0),
         "lineage_s": search_profile.get("lineage_s", 0.0),
+        "language": "indic" if is_indic(query) else "en",
     }
 
     if not evidence:

@@ -17,7 +17,8 @@ makes the entire index unreadable and forces a full re-ingest. Only the reranker
     python deploy.py check   # is docker available, is .env filled in
     python deploy.py tier    # report detected hardware and the reranker tier it implies
     python deploy.py up      # write RERANK_MODEL into .env if unset, then docker compose up -d
-    python deploy.py down
+    python deploy.py stop    # pause the container, keep it (fast to resume with `up`)
+    python deploy.py down    # stop and remove the container
     python deploy.py status
 """
 
@@ -49,6 +50,10 @@ def _docker_available():
         return False, "docker CLI not found on PATH. Install Docker first."
     result = _run(["docker", "info"], capture_output=True, text=True)
     if result.returncode != 0:
+        if "permission denied" in result.stderr.lower():
+            return False, ("permission denied talking to the Docker socket. If this account was "
+                           "just added to the docker group, that only takes effect in new "
+                           "sessions - run `newgrp docker` or start a new login shell, then retry.")
         return False, "docker daemon not reachable. Is Docker running?"
     return True, "ok"
 
@@ -160,6 +165,11 @@ def cmd_up(_args):
     return 1
 
 
+def cmd_stop(_args):
+    """Pause the container without removing it - a later `up` just restarts it, no rebuild."""
+    return _run(["docker", "compose", "stop"]).returncode
+
+
 def cmd_down(_args):
     return _run(["docker", "compose", "down"]).returncode
 
@@ -184,11 +194,12 @@ def main():
     sub.add_parser("check", help="Verify Docker and .env are ready. Changes nothing.")
     sub.add_parser("tier", help="Report detected hardware and the reranker tier it implies. Changes nothing.")
     sub.add_parser("up", help="Start the service and wait for it to become healthy.")
-    sub.add_parser("down", help="Stop the service.")
+    sub.add_parser("stop", help="Pause the container, keep it - a later `up` just restarts it.")
+    sub.add_parser("down", help="Stop the service and remove its container.")
     sub.add_parser("status", help="Check whether it is reachable right now.")
     args = parser.parse_args()
 
-    handlers = {"check": cmd_check, "tier": cmd_tier, "up": cmd_up, "down": cmd_down, "status": cmd_status}
+    handlers = {"check": cmd_check, "tier": cmd_tier, "up": cmd_up, "stop": cmd_stop, "down": cmd_down, "status": cmd_status}
     sys.exit(handlers[args.command](args))
 
 

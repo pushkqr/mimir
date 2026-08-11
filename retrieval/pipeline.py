@@ -75,6 +75,7 @@ def run_retrieval(
     chat_history: Optional[List[Dict[str, str]]] = None,
     status_callback: Optional[Callable[[str], None]] = None,
     fast_mode: bool = True,
+    department: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Execute direct Weaviate search followed by 1-shot Cerebras synthesis (Round-Robin load balanced)."""
     global _MODEL_COUNTER
@@ -118,8 +119,13 @@ def run_retrieval(
         _extracted_year = int(_year_match.group(0)) if _year_match else None
 
         def search_tool_wrapper(query: str, year: Optional[int] = None, fast_mode: bool = False) -> str:
+            # department comes from the authenticated token via run_retrieval's own argument,
+            # never from the LLM - the tool schema in search.py deliberately has no such
+            # parameter, so the model has no path to widen its own access.
             logger.info(f"LLM called search_tool(query='{query}', year={year}, fast_mode={fast_mode})")
-            results, ev, prof, recs = execute_search_tool(gemini_client, weaviate_client, collection_name, query, year, fast_mode)
+            results, ev, prof, recs = execute_search_tool(
+                gemini_client, weaviate_client, collection_name, query, year, fast_mode, department
+            )
             evidence.extend(ev)
             profiling_metrics.update(prof)
             recommendations.extend(recs)

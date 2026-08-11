@@ -80,6 +80,18 @@ scratch/*
 # in a distributed deployment are private addresses, so it has to run on the application host
 # rather than a laptop. Untracked, it existed only on the machine it could not be run from.
 !scratch/preflight.py
+# One-time backfill: tags pre-existing GovDocs chunks with a department, for the token
+# security-groups feature. Documents how the live corpus was migrated onto it.
+!scratch/backfill_department.py
+# Read-only check of supersedes/references extraction hit-rate against real department text,
+# meant to be run before ingesting a new department, not just once.
+!scratch/validate_relations.py
+# One-time backfill: re-runs the improved supersedes/references extraction against the
+# already-ingested corpus. Documents how the live citation graph was repaired.
+!scratch/backfill_relations.py
+# The actual bulk-ingestion driver for all 32 department folders - long-running and meant to
+# be restarted across sessions, not a one-off script.
+!scratch/ingest_all_departments.py
 
 # Testing and Logs
 *.log

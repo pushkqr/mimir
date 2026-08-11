@@ -36,7 +36,7 @@ Six components. Five are services with their own container; the sixth is the app
 | Weaviate | 8080, 50051 | Chunk storage, hybrid dense + BM25 search | always |
 | Embeddings + reranker | 7997 | BGE-M3 vectors and cross-encoder reranking, one Infinity server for both | always |
 | Translation | 8001 | IndicTrans2, Marathi and Hindi to English | always |
-| Generation | 11434 | Answer synthesis | only in sovereign mode |
+| Generation | 11500 | Answer synthesis | only in sovereign mode |
 | Docling | 8002 | PDF OCR for scanned or table-heavy documents | optional |
 | Application | 80, 443 | FastAPI, auth gate, admin console, the UI | always |
 
@@ -335,8 +335,10 @@ WARNING    : Host has memory for a larger model but not the cores to run it at
 | Ollama + GPU | CUDA GPU older than 7.5 (K80, P100, V100) | `qwen3:1.7b` through `30b` by VRAM |
 | Ollama | no usable GPU | `qwen3:1.7b`, or `4b` given 16+ cores |
 
-All three bind `127.0.0.1:11434` and speak `/v1/chat/completions`, so `LOCAL_GEN_URL` is
-identical whichever is chosen. Changing engine is not an application change.
+All three bind `127.0.0.1:11500` on the host (not Ollama's own default of 11434, which
+collides with any bare `ollama serve` a teammate runs on a shared machine) and speak
+`/v1/chat/completions`, so `LOCAL_GEN_URL` is identical whichever is chosen. Changing engine
+is not an application change.
 
 Compute capability 7.5 is SGLang's floor, which excludes several cards still common in
 university clusters. Those fall back to Ollama with the GPU attached rather than failing.

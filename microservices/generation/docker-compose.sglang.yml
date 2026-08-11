@@ -1,9 +1,9 @@
 # Answer generation on a CUDA GPU, served by SGLang.
 #
 # Used INSTEAD of docker-compose.yml, not alongside it: deploy.py selects one engine and
-# passes only that file. Both bind 127.0.0.1:11434 and both speak /v1/chat/completions, so
-# the application's LOCAL_GEN_URL is identical either way and switching engines is not an
-# application change.
+# passes only that file. Both bind 127.0.0.1:11500 on the host (11434 internally - see the
+# port mapping below) and both speak /v1/chat/completions, so the application's LOCAL_GEN_URL
+# is identical either way and switching engines is not an application change.
 #
 # SGLang needs compute capability 7.5 or newer (Turing). deploy.py checks this and falls
 # back to Ollama with GPU passthrough on older cards rather than failing to start.
@@ -37,7 +37,8 @@ services:
     volumes:
       - hf_cache:/root/.cache/huggingface
     ports:
-      - "127.0.0.1:11434:11434"
+      # Host side deliberately not 11434 (Ollama's own default) - see docker-compose.yml.
+      - "127.0.0.1:11500:11434"
     # SGLang's tokeniser workers communicate over shared memory; the 64MB Docker default
     # causes them to die under concurrency.
     shm_size: "16gb"

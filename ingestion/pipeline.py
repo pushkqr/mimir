@@ -8,6 +8,7 @@ from google import genai
 from ingestion.chunking import chunk_and_embed_circular
 from ingestion.state import compute_file_hash, save_ingestion_state, should_skip_file
 from core.log_config import get_logger
+from core.schema import DEFAULT_DEPARTMENT
 from ingestion.metadata import extract_document_metadata
 from ingestion.parsers import parse_pdf
 
@@ -21,6 +22,7 @@ def run_ingestion(
     docs_dir: str = "docs",
     target_files: Optional[List[str]] = None,
     force_reingest: bool = False,
+    department: str = DEFAULT_DEPARTMENT,
 ) -> List[Dict[str, Any]]:
     """Process PDF documents in target directory, upsert immediately to Weaviate per file, and save state."""
     if target_files:
@@ -73,6 +75,7 @@ def run_ingestion(
             # edges and the conflict warning in the system prompt had nothing to key on.
             "supersedes": extracted_metadata.get("supersedes"),
             "references": extracted_metadata.get("references"),
+            "department": department,
         }
 
         try:
