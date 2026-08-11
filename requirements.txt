@@ -15,7 +15,7 @@ pymupdf4llm
 
 # Orgpedia pre-transform pipeline (runs in warm daemon subprocess)
 docint @ git+https://github.com/mukundesh/docInt.git
-orgpedia @ git+https://github.com/orgpedia/orgpedia.git
+orgpedia @ git+https://github.com/orgpedia/orgpedia.git@da91a2fd5dd056b243fe7b08fefd3571be5c304f
 translateindic @ git+https://github.com/orgpedia/translateIndic.git
 pytesseract>=0.3.10,<0.4
 pdfplumber>=0.9.0,<0.10
