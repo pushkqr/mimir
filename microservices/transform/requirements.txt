@@ -3,6 +3,7 @@ uvicorn
 python-multipart
 docint @ git+https://github.com/mukundesh/docInt.git
 vendor/orgpedia_mahwater2024-0.0.1.tar.gz
+orgpedia @ git+https://github.com/orgpedia/orgpedia.git@da91a2fd5dd056b243fe7b08fefd3571be5c304f
 indictranstokenizer @ git+https://github.com/orgpedia/IndicTransTokenizer.git
 translateindic @ git+https://github.com/orgpedia/translateIndic.git
 pytesseract>=0.3.10,<0.4
