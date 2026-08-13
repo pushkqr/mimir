@@ -22,7 +22,9 @@ _AUTHORIZED_SUBNETS = [
 
 Every request is checked against that list before authentication is considered. If someone steals a valid token and uses it from a home connection or a coffee shop, the middleware answers `403 Network Access Denied` and no model is ever invoked. Deploying inside a department means setting the variable to the department's range; exposing the system publicly requires deliberately widening it, so the secure posture is what you get by default.
 
-Two details are easy to get wrong and worth stating. Caddy terminates TLS in front of the application, so the client address must be read from `X-Forwarded-For` rather than the socket, which would otherwise report the proxy. And the network check applies to `/api/admin/*` as well: an earlier revision exempted admin routes on the grounds that they verify the admin token themselves, which left a hole in a perimeter that claimed to be zero-trust.
+Three details are easy to get wrong and worth stating. Caddy terminates TLS in front of the application, so the client address must be read from `X-Forwarded-For` rather than the socket, which would otherwise report the proxy. The network check applies to `/api/admin/*` as well: an earlier revision exempted admin routes on the grounds that they verify the admin token themselves, which left a hole in a perimeter that claimed to be zero-trust.
+
+The third is a deliberate, narrow exemption. `/assets/*` — the stylesheet and webfonts — sits outside the *token* check, because a `<link>` tag cannot carry a bearer header, and without the exemption every page an unauthenticated visitor is meant to see (the landing page, the login form, the admin gate) would render as unstyled HTML. Those files stay **behind the network gate**, which is the control that actually matters here, and they contain no data: the exemption is scoped by path prefix and grants nothing beyond CSS and fonts.
 
 This is the application-layer half of a pair. In the reference deployment, security groups already refuse the same traffic at the network layer, and only the application instance has a public address at all. Neither layer is asked to be the only one.
 
@@ -44,7 +46,10 @@ Mimir features a fully baked API for IT departments to programmatically provisio
 
 - `POST /api/admin/tokens`: Generates a random secure token, hashes it, and stores it.
 - `GET /api/admin/tokens`: Returns a list of all active tokens (hashes only).
+- `PUT /api/admin/tokens/{token_hash}`: Renames a token, or moves it to another department.
 - `DELETE /api/admin/tokens/{token_hash}`: Instantly revokes an officer's access globally.
+
+Each token carries a **department**, which scopes what that officer can retrieve. The value is one of the departments in `core/schema.py`, or the `ALL` sentinel — not a real department but a supervisor-level marker that skips the filter entirely. This is what makes one deployment serve several departments off a single index without one officer seeing another's corpus.
 
 ---
 
