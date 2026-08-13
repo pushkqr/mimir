@@ -10,13 +10,13 @@ Every figure and code reference here is taken from the source. Where something i
 
 | | |
 |---|---|
-| Corpus | Scaling to 4,730 department documents. The measured figures below were taken on an earlier 533-document corpus (10,194 chunks) |
+| Corpus | ~104,000 documents, 790,053 indexed sections, 33 departments. The measured figures below were taken on an earlier 533-document corpus (10,194 chunks) |
 | Accuracy | 88/100 pass rate, judge average 4.13/5, term average 0.653, **on that 533-document corpus** |
-| Latency | 3 to 8 seconds end to end |
-| Infrastructure | 7 instances in one VPC, one per service |
+| Latency | 3 to 8 seconds end to end on hosted generation; ~16s observed in sovereign mode on a self-hosted 26B model |
+| Infrastructure | One instance per service; the reference AWS topology runs 7 in a single VPC |
 | Languages | English, Marathi, Hindi |
 
-The accuracy figure is deliberately qualified. It demonstrates the harness works and reflects the retrieval design; it is not a current score for a corpus roughly nine times larger, and quoting it as one would be dishonest. Re-running the benchmark after a corpus change is the only way to know.
+The accuracy figure is deliberately qualified. It demonstrates the harness works and reflects the retrieval design; it is not a current score for a corpus roughly two hundred times larger, and quoting it as one would be dishonest. Re-running the benchmark after a corpus change is the only way to know.
 
 ---
 

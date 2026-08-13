@@ -70,7 +70,7 @@ flowchart TD
 
 5. **Generation.** The retrieved chunks go into a prompt that instructs the model to answer *only* from what it was given, and to open with an explicit warning when two documents disagree on a figure. By default this runs on **Ollama** on the department's own hardware. `DEPLOYMENT_MODE=hybrid` swaps in **Cerebras** and **Gemini 2.5 Flash** where third-party inference is acceptable. Every model in the self-hosted path is open-weight, so nothing proprietary is load-bearing.
 
-5. **Benchmark Integrity.** How do we know this actually works? We run an automated harness across a curated set of hard policy questions — covering simple English, Marathi queries, complex synthesis, GR number lookups, and intentional "not found" cases — grading the system on both term-match and semantic accuracy. See [03-benchmark-and-evaluation.md](03-benchmark-and-evaluation.md).
+**How do we know it works?** Not a stage, but the thing that keeps the five above honest: an automated harness runs a curated set of hard policy questions — simple English, Marathi queries, complex synthesis, GR number lookups, and intentional "not found" cases — grading each on both term-match and semantic accuracy. See [03-benchmark-and-evaluation.md](03-benchmark-and-evaluation.md).
 
 ---
 

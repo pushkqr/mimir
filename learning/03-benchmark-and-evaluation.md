@@ -60,7 +60,7 @@ The overall run is graded A–D from `average_judge_score` and `average_term_sco
 
 ### Results (100-case benchmark, 533-document corpus)
 
-> **These figures were measured against a 533-document corpus and are not a current score.** The corpus has since grown by roughly an order of magnitude, and a larger corpus changes retrieval difficulty in both directions: more documents that could answer a question, and more near-duplicates to confuse it. The numbers below show the harness works and record what the two fixes bought. They do not transfer, and re-running is the only way to know.
+> **These figures were measured against a 533-document corpus and are not a current score.** The deployed corpus is now roughly **104,000 documents and 790,000 indexed sections across 33 departments** — around two hundred times larger, not the order of magnitude this note previously claimed. Scale changes retrieval difficulty in both directions: more documents that could answer a question, and far more near-duplicates to confuse it. Note that the dominant failure mode below is *exactly* the one a larger corpus makes worse. The numbers record what the two fixes bought on the corpus of the day. They do not transfer, and re-running is the only way to know.
 
 **88/100 cases passing** (`average_judge_score = 4.13`, `average_term_score = 0.653`), up from an 83/100 baseline. The improvement came from two fixes, not from touching the benchmark or ground-truth data:
 - Root-caused and fixed a deadlocked translation microservice (undersized RAM on that node caused silent hangs on Marathi/Hindi queries).
