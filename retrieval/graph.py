@@ -24,40 +24,28 @@ the honest measure of how complete the corpus is.
 """
 
 import json
-import re
 import collections
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from core.log_config import get_logger
+# _STEM_RE lives with document_label: what counts as a real GR number is one decision, and the
+# graph keys documents on exactly the pattern the label falls back to.
+from retrieval.support import _STEM_RE, document_label
 
 logger = get_logger(__name__)
 
 GRAPH_PATH = Path(__file__).resolve().parent.parent / "data" / "citation_graph.json"
 
-# A Maharashtra GR number reduces to a department stem plus a year: "NGC-2010/(193/10)/Mashi-4"
-# -> (NGC, 2010). The trailing serial and section suffix are too inconsistently OCR'd to key on.
-_STEM_RE = re.compile(r"([A-Za-zऀ-ॿ]{3,})[\s-]*[-–]\s*(\d{4})")
-
-
-# Titles come from the first markdown heading, which for OCR'd scans is very often the page
-# marker rather than the subject line, a generic section header ("Preamble:", "Subject:"), or
-# a heading truncated mid-word ("Narrow-", "Validation-"). Those make useless node labels -
-# seen live in the citation graph as edges labelled "Preamble:" or "Narrow-" instead of a real
-# document name. A short fragment ending in a colon or hyphen is never a real GR title, which
-# reads as a full descriptive phrase.
-_JUNK_TITLE_RE = re.compile(r"^\s*(page\s*\d+|#+\s*)?\s*$|^.{2,24}[:\-]\s*$", re.IGNORECASE)
-
-
 def _pick_label(props: dict, filename: str) -> str:
-    title = (props.get("document_title") or "").strip()
-    if title and not _JUNK_TITLE_RE.match(title) and len(title) > 6:
-        return title
-    number = (props.get("doc_number") or "").strip()
-    if number and len(number) > 3:
-        return number
-    return filename
+    """Node label for the lineage graph.
+
+    Delegates to the shared implementation so the graph, the citation chips and the prompt's
+    context headers cannot drift apart — they were three separate copies of this decision, and
+    only this one had a junk-title guard.
+    """
+    return document_label(props, filename)
 
 
 def _citation_keys(text: str) -> set:

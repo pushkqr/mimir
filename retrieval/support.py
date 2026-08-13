@@ -1,7 +1,62 @@
 import os
-from typing import Any, List
+import re
+from datetime import datetime
+from typing import Any, Dict, List
 
 import core.deployment as deployment
+
+
+# A Maharashtra GR number reduces to a department stem plus a year:
+# "NGC-2010/(193/10)/Mashi-4" -> (NGC, 2010). A value that cannot produce that pair is not a
+# GR number; in this corpus it is usually a letterhead or post-box number ("647051", "2023/").
+_STEM_RE = re.compile(r"([A-Za-zऀ-ॿ]{3,})[\s-]*[-–]\s*(\d{4})")
+
+# Titles come from the first markdown heading, which for OCR'd scans is very often the page
+# marker rather than the subject line, a generic section header ("Preamble:"), or a heading
+# truncated mid-word. A short fragment ending in a colon or hyphen is never a real GR title.
+_JUNK_TITLE_RE = re.compile(r"^\s*(page\s*\d+|#+\s*)?\s*$|^.{2,24}[:\-]\s*$", re.IGNORECASE)
+
+
+def _issue_date_from_filename(filename: str) -> str:
+    """Orgpedia filenames begin with the issue date: 201903251256356710.pdf.en.txt."""
+    stem = os.path.basename(str(filename or ""))
+    if len(stem) < 8 or not stem[:8].isdigit():
+        return ""
+    try:
+        return datetime.strptime(stem[:8], "%Y%m%d").strftime("%d %B %Y")
+    except ValueError:
+        return ""
+
+
+def document_label(props: Dict[str, Any], filename: str = "") -> str:
+    """Human-readable name for a document, for citations and for the prompt's context headers.
+
+    Every call site used to build this as f"{title} ({doc_number})" with no guard, which is how
+    officers were shown citations reading "Page 1 (647051)" — 90% of this corpus has a title of
+    "Page N" (the extractor takes orgpedia's page marker as the heading) and most doc_numbers
+    are letterhead numbers rather than GR numbers. The same string is fed to the model, so it
+    also wrote those labels into its own answers.
+
+    Falls back in order of how much an officer can actually do with it: a real subject line, a
+    real GR number, the issue date, and only then whatever is left.
+    """
+    title = str(props.get("document_title") or "").strip()
+    if title and len(title) > 6 and not _JUNK_TITLE_RE.match(title):
+        return title
+
+    number = str(props.get("doc_number") or "").strip()
+    if number and _STEM_RE.search(number):
+        return number
+
+    source = filename or props.get("source_filename") or ""
+    issued = _issue_date_from_filename(source)
+    if issued:
+        return f"GR dated {issued}"
+
+    # A doc_number that carries no citation key is still better than a raw filename.
+    if number and len(number) > 3:
+        return number
+    return str(source) or "Unknown document"
 
 
 def extract_response_text(response: Any) -> str:
@@ -68,6 +123,7 @@ def build_context_text(top_results: List[Any]) -> str:
                     "doc_number": payload.get("doc_number", "Document"),
                     "document_title": payload.get("document_title", ""),
                     "section_title": payload.get("section_title", ""),
+                    "source_filename": payload.get("source_filename", ""),
                     "context": parent_ctx if parent_ctx else child_txt,
                     "children": [child_txt] if child_txt else [],
                     "translated_texts": [translated] if translated else [],
@@ -84,19 +140,16 @@ def build_context_text(top_results: List[Any]) -> str:
                 "doc_number": payload.get("doc_number", "Document"),
                 "document_title": payload.get("document_title", ""),
                 "section_title": payload.get("section_title", ""),
+                "source_filename": payload.get("source_filename", ""),
                 "text": child_txt,
                 "translated": translated,
                 "supersedes": payload.get("supersedes"),
                 "references": payload.get("references"),
             })
 
-    def _make_header(doc_number: str, document_title: str, section_title: str) -> str:
-        doc_label = (
-            f"{document_title} ({doc_number})"
-            if document_title and document_title != doc_number
-            else doc_number
-        )
-        header = f"[Document: {doc_label}"
+    def _make_header(block: Dict[str, Any]) -> str:
+        header = f"[Document: {document_label(block, block.get('source_filename', ''))}"
+        section_title = block.get("section_title", "")
         if section_title:
             header += f" | Section: {section_title}"
         return header + "]"
@@ -117,11 +170,7 @@ def build_context_text(top_results: List[Any]) -> str:
         if not ctx:
             continue
 
-        header = _make_header(
-            block["doc_number"],
-            block.get("document_title", ""),
-            block.get("section_title", ""),
-        )
+        header = _make_header(block)
         meta = header + "\n"
         if block.get("supersedes"):
             meta += f"[Supersedes: {block['supersedes']}]\n"
@@ -137,11 +186,7 @@ def build_context_text(top_results: List[Any]) -> str:
         display_txt = translated if translated and _is_mostly_indic(txt) else txt
         if not display_txt or display_txt in seen_texts:
             continue
-        header = _make_header(
-            chunk["doc_number"],
-            chunk.get("document_title", ""),
-            chunk.get("section_title", ""),
-        )
+        header = _make_header(chunk)
         meta = header + "\n"
         if chunk.get("supersedes"):
             meta += f"[Supersedes: {chunk['supersedes']}]\n"

@@ -11,6 +11,7 @@ from google.genai import types
 import weaviate
 import weaviate.classes as wvc
 from retrieval.query import generate_query_variations
+from retrieval.support import document_label
 from retrieval.support import extract_response_text, build_context_text
 from core.utils import embed_content_safe, generate_content_safe, local_rerank_safe
 from core.log_config import get_logger
@@ -264,9 +265,7 @@ def build_evidence(search_results: List[Any]) -> List[Dict[str, Any]]:
         if not clean_sec:
             clean_sec = "Section not available"
 
-        doc_number = payload.get("doc_number", "Unknown document")
-        title = payload.get("document_title", "")
-        doc_label = f"{title} ({doc_number})" if title else doc_number
+        doc_label = document_label(payload, payload.get("source_filename", ""))
         score = getattr(result.metadata, "score", 0.0) if hasattr(result, "metadata") and result.metadata else 0.0
         
         evidence.append(
@@ -522,10 +521,8 @@ def execute_search_tool(
     seen_recs = set(used_titles)
     for res in search_results:
         payload = res.payload or {}
-        doc_num = payload.get("doc_number", "Unknown document")
-        title = payload.get("document_title", "")
-        doc_label = f"{title} ({doc_num})" if title and title != doc_num else doc_num
-        
+        doc_label = document_label(payload, payload.get("source_filename", ""))
+
         if doc_label and doc_label not in seen_recs:
             seen_recs.add(doc_label)
             recommendations.append({
