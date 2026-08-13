@@ -28,9 +28,17 @@ services:
       # --- Performance & stability tuning ---
       # Ingestion does not block live queries; each batch is indexed in the background.
       ASYNC_INDEXING: "true"
-      # Hard cap Go's heap below the OOM threshold on a 4 GB instance. Without this,
-      # Weaviate will grow to fill available RAM and get OOM-killed by the kernel.
-      GOMEMLIMIT: "3500MiB"
+      # Soft cap on Go's heap, sized to the host. Without it Weaviate grows to fill available
+      # RAM and gets OOM-killed by the kernel; set too low it does the opposite damage, since
+      # GOMEMLIMIT does not fail fast — it makes the GC run continuously to stay under the
+      # ceiling. At 3500MiB (sized for a 4 GB instance) on a 30 GB host, a bulk metadata
+      # backfill pinned the heap at the cap and Weaviate began logging
+      #   "skipping hnsw cleanup due to memory pressure"
+      # every 5 minutes, so HNSW tombstones from each update were never reclaimed — the
+      # updates created the pressure that disabled the cleanup that would have relieved it.
+      # Keep this at roughly 40% of host RAM, well clear of the working set, and re-check it
+      # if this stack moves to a smaller machine.
+      GOMEMLIMIT: "12GiB"
       # Suppress per-object verbose logs; only warnings and above reach stdout.
       LOG_LEVEL: "warning"
     volumes:
