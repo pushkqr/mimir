@@ -5,16 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mimir Admin Console</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f59e0b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M2.5 16.88a1 1 0 0 1-.32-1.43l9-13.02a1 1 0 0 1 1.64 0l9 13.01a1 1 0 0 1-.32 1.44l-8.51 4.86a2 2 0 0 1-1.98 0Z'/><path d='M12 2v20'/></svg>">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-<style type="text/tailwindcss">
-  @custom-variant dark (&:where(.dark, .dark *));
-  @theme {
-    --color-zinc-50:#f5f7fa; --color-zinc-100:#eef1f6; --color-zinc-200:#e0e5ee; --color-zinc-300:#cbd3e1;
-    --color-zinc-400:#93a0b5; --color-zinc-500:#64718a; --color-zinc-600:#475066; --color-zinc-700:#353d50;
-    --color-zinc-800:#222838; --color-zinc-900:#161b28; --color-zinc-950:#0d1119;
-  }
+<link rel="stylesheet" href="/assets/app.css">
+<style>
   body{font-family:'Geist',system-ui,sans-serif}
   html{font-size:19px}
   .serif{font-family:'Instrument Serif',Georgia,serif;font-weight:400}
@@ -24,6 +16,21 @@
   .dark .bg-grid{background-image:radial-gradient(rgba(148,163,184,.07) 1px,transparent 1px)}
   @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   .fadein{animation:fadein .35s ease both}
+
+  /* Tab pills. aria-selected doubles as the styling hook so the active state and the
+     accessibility state can never drift apart. */
+  .tabb{white-space:nowrap;border-radius:.6rem;padding:.4rem .85rem;font-size:.75rem;font-weight:500;color:#64718a;transition:background .18s ease,color .18s ease}
+  .tabb:hover{color:#161b28}
+  .dark .tabb:hover{color:#eef1f6}
+  .tabb[aria-selected="true"]{background:rgba(245,158,11,.12);color:#b45309}
+  .dark .tabb[aria-selected="true"]{color:#fbbf24}
+
+  /* Shimmer placeholder shown while a panel's first fetch is in flight, so the console
+     reads as loading rather than as empty or broken. */
+  @keyframes shimmer{to{background-position:-200% 0}}
+  .skel{background:linear-gradient(90deg,rgba(148,163,184,.10) 25%,rgba(148,163,184,.20) 37%,rgba(148,163,184,.10) 63%);background-size:200% 100%;animation:shimmer 1.3s linear infinite;border-radius:.5rem;color:transparent}
+  .dark .skel{background:linear-gradient(90deg,rgba(148,163,184,.06) 25%,rgba(148,163,184,.13) 37%,rgba(148,163,184,.06) 63%);background-size:200% 100%}
+  @media (prefers-reduced-motion:reduce){.skel{animation:none}.fadein{animation:none}}
 </style>
 </head>
 <body class="text-slate-900 antialiased dark:text-slate-100">
@@ -56,7 +63,7 @@
 <!-- ── Console ────────────────────────────────────────────────────────── -->
 <div id="console" class="hidden">
 <header class="sticky top-0 z-20 border-b border-zinc-300/70 bg-[#f4f7fc]/80 backdrop-blur dark:border-zinc-900 dark:bg-[#0a0e1a]/75">
-  <div class="mx-auto flex max-w-5xl items-center justify-between px-5 py-3.5">
+  <div class="mx-auto flex max-w-6xl items-center justify-between px-5 pb-2 pt-3.5">
     <div class="flex items-center gap-2">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-600 dark:text-amber-400"><path d="M2.5 16.88a1 1 0 0 1-.32-1.43l9-13.02a1 1 0 0 1 1.64 0l9 13.01a1 1 0 0 1-.32 1.44l-8.51 4.86a2 2 0 0 1-1.98 0Z"/><path d="M12 2v20"/></svg>
       <span class="serif text-xl leading-none tracking-tight">Admin Console</span>
@@ -70,341 +77,390 @@
       <button id="lock" class="rounded-full bg-zinc-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200">Lock</button>
     </div>
   </div>
+  <nav id="tabs" role="tablist" aria-label="Console sections" class="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 pb-1.5">
+    <button role="tab" data-tab="overview"   aria-selected="true"  class="tabb">Overview</button>
+    <button role="tab" data-tab="deployment" aria-selected="false" class="tabb">Deployment</button>
+    <button role="tab" data-tab="access"     aria-selected="false" class="tabb">Officer Access</button>
+    <button role="tab" data-tab="corpus"     aria-selected="false" class="tabb">Corpus</button>
+    <button role="tab" data-tab="activity"   aria-selected="false" class="tabb">Activity</button>
+    <button role="tab" data-tab="insights"   aria-selected="false" class="tabb">Insights</button>
+  </nav>
 </header>
 
-<main class="mx-auto max-w-5xl px-5 py-8">
+<main class="mx-auto max-w-6xl px-5 py-8">
 
-  <!-- Stats -->
-  <div class="mb-8 grid grid-cols-3 gap-3">
-    <div class="rounded-2xl border border-zinc-200 bg-white/60 p-4 dark:border-zinc-800 dark:bg-[#10151f]/50">
-      <div class="mono text-[10px] uppercase tracking-wide text-zinc-400">Indexed Sections</div>
-      <div id="stChunks" class="serif mt-1 text-3xl text-amber-600 dark:text-amber-400">&mdash;</div>
-    </div>
-    <div class="rounded-2xl border border-zinc-200 bg-white/60 p-4 dark:border-zinc-800 dark:bg-[#10151f]/50">
-      <div class="mono text-[10px] uppercase tracking-wide text-zinc-400">Source Files</div>
-      <div id="stPdfs" class="serif mt-1 text-3xl text-amber-600 dark:text-amber-400">&mdash;</div>
-      <div id="stBreak" class="mono mt-0.5 text-[10px] text-zinc-500"></div>
-    </div>
-    <div class="rounded-2xl border border-zinc-200 bg-white/60 p-4 dark:border-zinc-800 dark:bg-[#10151f]/50">
-      <div class="mono text-[10px] uppercase tracking-wide text-zinc-400">Officers</div>
-      <div id="stOfficers" class="serif mt-1 text-3xl text-amber-600 dark:text-amber-400">&mdash;</div>
-    </div>
-  </div>
-
-  <!-- Deployment topology -->
-  <section class="mb-8 rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
-    <div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-      <h2 class="serif text-2xl tracking-tight">Deployment</h2>
-      <button id="topoRefresh" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Re-probe</button>
-    </div>
-    <p id="topoSummary" class="mb-4 text-sm text-zinc-500 dark:text-zinc-400">Probing components&hellip;</p>
-
-    <div class="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-      <table class="w-full text-left text-[12px]">
-        <thead class="bg-zinc-50 dark:bg-zinc-900">
-          <tr class="text-[10px] uppercase tracking-wide text-zinc-500">
-            <th class="px-3 py-2 font-semibold">Component</th>
-            <th class="px-3 py-2 font-semibold">Runs on</th>
-            <th class="px-3 py-2 font-semibold">Host</th>
-            <th class="px-3 py-2 font-semibold">Hosting</th>
-            <th class="px-3 py-2 font-semibold">Status</th>
-          </tr>
-        </thead>
-        <tbody id="topoBody"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- Officer tokens -->
-  <section class="mb-8 rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
-    <div class="mb-4 flex items-baseline justify-between">
-      <h2 class="serif text-2xl tracking-tight">Officer Access</h2>
-      <span class="text-xs text-zinc-400">Provision, rename, revoke</span>
-    </div>
-
-    <form id="newTok" class="mb-5 flex gap-2">
-      <input id="newLabel" required placeholder="Officer name or designation" class="flex-1 rounded-xl border border-zinc-300 bg-white/50 px-4 py-2.5 text-sm transition focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700 dark:bg-zinc-900/50">
-      <select id="newDept" title="Department this officer can search" class="w-44 rounded-xl border border-zinc-300 bg-white/50 px-3 py-2.5 text-sm transition focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700 dark:bg-zinc-900/50"></select>
-      <button class="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 dark:bg-amber-600 dark:hover:bg-amber-500">Issue Token</button>
-    </form>
-
-    <div id="issued" class="mb-5 hidden rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
-      <div class="mb-1 text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">New token, copy it now</div>
-      <div class="flex items-center gap-2">
-        <code id="issuedTok" class="mono flex-1 select-all break-all rounded-lg bg-white/70 px-3 py-2 text-[13px] dark:bg-zinc-900/70"></code>
-        <button id="copyTok" type="button" class="rounded-lg border border-zinc-300 px-3 py-2 text-xs transition hover:border-amber-500 dark:border-zinc-700">Copy</button>
+  <!-- ══ Overview ═══════════════════════════════════════════════════════ -->
+  <section data-panel="overview">
+    <div class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div class="rounded-2xl border border-zinc-200 bg-white/60 p-5 dark:border-zinc-800 dark:bg-[#10151f]/50">
+        <div class="mono text-[11px] uppercase tracking-wide text-zinc-400">Indexed Sections</div>
+        <div id="stChunks" class="serif mt-1 text-5xl leading-none text-amber-600 dark:text-amber-400">&mdash;</div>
       </div>
-      <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Only the hash is stored. This value cannot be shown again.</p>
-    </div>
-
-    <div id="tokList" class="space-y-2"></div>
-  </section>
-
-  <!-- Ingestion -->
-  <section class="rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
-    <div class="mb-4 flex items-baseline justify-between">
-      <h2 class="serif text-2xl tracking-tight">Corpus Ingestion</h2>
-      <span class="text-xs text-zinc-400">Upload a GR, then index it</span>
-    </div>
-
-    <label id="drop" for="pdf" class="mb-4 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-300 px-6 py-8 text-center transition hover:border-amber-500/60 dark:border-zinc-700">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="mb-2 text-zinc-400"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      <span id="dropMsg" class="text-sm text-zinc-500 dark:text-zinc-400">Drop a PDF here, or click to browse</span>
-      <input type="file" id="pdf" accept="application/pdf,.pdf" class="hidden">
-    </label>
-
-    <div class="flex items-center gap-2">
-      <select id="ingestDept" title="Department this document belongs to" class="w-56 rounded-xl border border-zinc-300 bg-white/50 px-3 py-2.5 text-sm transition focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700 dark:bg-zinc-900/50"></select>
-      <button id="ingestBtn" disabled class="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none dark:bg-amber-600 dark:hover:bg-amber-500">Upload &amp; Ingest</button>
-      <span class="text-xs text-zinc-400">Typically 1 to 3 minutes per document</span>
-    </div>
-
-    <pre id="ilog" class="mono mt-4 hidden max-h-56 overflow-auto whitespace-pre-wrap rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 text-[12px] leading-relaxed text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300"></pre>
-
-    <div class="mt-6 border-t border-zinc-200 pt-5 dark:border-zinc-800">
-      <div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 class="text-sm font-semibold">Quarantine</h3>
-        <span class="text-xs text-zinc-400">Uploads stage here and are not searchable until promoted</span>
+      <div class="rounded-2xl border border-zinc-200 bg-white/60 p-5 dark:border-zinc-800 dark:bg-[#10151f]/50">
+        <div class="mono text-[11px] uppercase tracking-wide text-zinc-400">Source Files</div>
+        <div id="stPdfs" class="serif mt-1 text-5xl leading-none text-amber-600 dark:text-amber-400">&mdash;</div>
+        <div id="stBreak" class="mono mt-1 text-[11px] text-zinc-500"></div>
       </div>
-      <p class="mb-3 text-[12px] text-zinc-500 dark:text-zinc-400">
-        An uploaded document is indexed into a separate collection. Officers querying the
-        portal cannot see it. Promoting copies it into the live corpus; discarding removes it
-        entirely. Both actions are recorded in the access log.
-      </p>
-      <div id="qList" class="space-y-2"></div>
+      <div class="rounded-2xl border border-zinc-200 bg-white/60 p-5 dark:border-zinc-800 dark:bg-[#10151f]/50">
+        <div class="mono text-[11px] uppercase tracking-wide text-zinc-400">Officers</div>
+        <div id="stOfficers" class="serif mt-1 text-5xl leading-none text-amber-600 dark:text-amber-400">&mdash;</div>
+      </div>
+      <div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
+        <div class="mono text-[11px] uppercase tracking-wide text-emerald-600/70 dark:text-emerald-400/70">Self-hosted</div>
+        <div id="stSelf" class="serif mt-1 text-5xl leading-none text-emerald-600 dark:text-emerald-400">&mdash;</div>
+        <div class="mono mt-1 text-[11px] text-zinc-500">components on our own infrastructure</div>
+      </div>
     </div>
-  </section>
 
-  <!-- Citation graph -->
-  <section class="mt-8 rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
-    <div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-      <h2 class="serif text-2xl tracking-tight">Document Lineage</h2>
-      <button id="graphRebuild" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Rebuild</button>
-    </div>
-    <p id="graphSummary" class="mb-4 text-sm text-zinc-500 dark:text-zinc-400">Loading&hellip;</p>
-
-    <div class="grid gap-4 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-      <div class="rounded-xl border border-zinc-200 p-2 dark:border-zinc-800">
-        <svg id="graphSvg" viewBox="0 0 320 320" class="h-auto w-full"></svg>
-        <div class="mt-1 flex items-center justify-center gap-3 text-[10px] text-zinc-400">
-          <span><span class="mr-1 inline-block h-px w-4 align-middle bg-amber-500"></span>supersedes</span>
-          <span><span class="mr-1 inline-block h-px w-4 align-middle bg-zinc-400"></span>references</span>
-          <span class="text-zinc-400">dashed = ambiguous</span>
+    <div class="grid items-start gap-6 lg:grid-cols-2">
+      <!-- Sovereignty summary -->
+      <section class="rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
+        <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 class="serif text-2xl tracking-tight">Where this runs</h2>
+          <span id="ovMode"></span>
         </div>
+        <p id="ovDeploy" class="text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">Probing components&hellip;</p>
+        <button data-goto="deployment" class="mt-4 rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Full topology &rarr;</button>
+      </section>
+
+      <!-- Recent activity -->
+      <section class="rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
+        <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 class="serif text-2xl tracking-tight">Recent activity</h2>
+          <span class="text-xs text-zinc-400">Last 6 events</span>
+        </div>
+        <div id="ovActivity" class="space-y-1.5"></div>
+        <button data-goto="activity" class="mt-4 rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Full access log &rarr;</button>
+      </section>
+    </div>
+  </section>
+
+  <!-- ══ Deployment ═════════════════════════════════════════════════════ -->
+  <section data-panel="deployment" class="hidden">
+    <section class="rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
+      <div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="serif text-2xl tracking-tight">Deployment</h2>
+        <button id="topoRefresh" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Re-probe</button>
       </div>
-      <div class="max-h-80 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-        <table class="w-full text-left text-[12px]">
-          <thead class="sticky top-0 bg-zinc-50 dark:bg-zinc-900">
-            <tr class="text-[10px] uppercase tracking-wide text-zinc-500">
-              <th class="px-3 py-2 font-semibold">From</th>
-              <th class="px-3 py-2 font-semibold">Relation</th>
-              <th class="px-3 py-2 font-semibold">To</th>
-              <th class="px-3 py-2 font-semibold">Confidence</th>
+      <p id="topoSummary" class="mb-4 text-sm text-zinc-500 dark:text-zinc-400">Probing components&hellip;</p>
+
+      <div class="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <table class="w-full text-left text-[13px]">
+          <thead class="bg-zinc-50 dark:bg-zinc-900">
+            <tr class="text-[11px] uppercase tracking-wide text-zinc-500">
+              <th class="px-3 py-2.5 font-semibold">Component</th>
+              <th class="px-3 py-2.5 font-semibold">Runs on</th>
+              <th class="px-3 py-2.5 font-semibold">Host</th>
+              <th class="px-3 py-2.5 font-semibold">Hosting</th>
+              <th class="px-3 py-2.5 font-semibold">Status</th>
             </tr>
           </thead>
-          <tbody id="graphBody"></tbody>
+          <tbody id="topoBody"></tbody>
         </table>
       </div>
-    </div>
+    </section>
   </section>
 
-  <!-- Access log -->
-  <section class="mt-8 rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
-    <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-      <h2 class="serif text-2xl tracking-tight">Access Log</h2>
-      <span class="text-xs text-zinc-400">Append-only. Every authentication, query and corpus change</span>
-    </div>
+  <!-- ══ Officer Access ═════════════════════════════════════════════════ -->
+  <section data-panel="access" class="hidden">
+    <section class="rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
+      <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="serif text-2xl tracking-tight">Officer Access</h2>
+        <span class="text-xs text-zinc-400">Provision, rename, revoke</span>
+      </div>
 
-    <div class="mb-4 flex flex-wrap items-center gap-2">
-      <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
-        <span class="text-[11px] uppercase tracking-wide text-zinc-400">Total</span>
-        <span id="auTotal" class="mono ml-2 text-sm font-semibold">&mdash;</span>
-      </div>
-      <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
-        <span class="text-[11px] uppercase tracking-wide text-zinc-400">Last 24h</span>
-        <span id="au24" class="mono ml-2 text-sm font-semibold">&mdash;</span>
-      </div>
-      <div class="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-1.5">
-        <span class="text-[11px] uppercase tracking-wide text-red-500/80">Denied</span>
-        <span id="auDenied" class="mono ml-2 text-sm font-semibold text-red-600 dark:text-red-400">&mdash;</span>
-      </div>
-      <select id="auFilter" class="ml-auto rounded-xl border border-zinc-300 bg-white/50 px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
-        <option value="">All events</option>
-        <option value="query">Queries</option>
-        <option value="auth.login">Officer logins</option>
-        <option value="auth.denied">Denied attempts</option>
-        <option value="admin.login">Admin logins</option>
-        <option value="token.issued">Tokens issued</option>
-        <option value="token.revoked">Tokens revoked</option>
-        <option value="document.uploaded">Uploads</option>
-        <option value="document.ingested">Ingestions</option>
-      </select>
-      <button id="auRefresh" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Refresh</button>
-    </div>
+      <form id="newTok" class="mb-5 flex flex-wrap gap-2">
+        <input id="newLabel" required placeholder="Officer name or designation" class="min-w-52 flex-1 rounded-xl border border-zinc-300 bg-white/50 px-4 py-2.5 text-sm transition focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700 dark:bg-zinc-900/50">
+        <select id="newDept" title="Department this officer can search" class="w-44 rounded-xl border border-zinc-300 bg-white/50 px-3 py-2.5 text-sm transition focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700 dark:bg-zinc-900/50"></select>
+        <button class="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 dark:bg-amber-600 dark:hover:bg-amber-500">Issue Token</button>
+      </form>
 
-    <div class="max-h-96 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-      <table class="w-full text-left text-[12px]">
-        <thead class="sticky top-0 bg-zinc-50 dark:bg-zinc-900">
-          <tr class="text-[10px] uppercase tracking-wide text-zinc-500">
-            <th class="px-3 py-2 font-semibold">Time</th>
-            <th class="px-3 py-2 font-semibold">Event</th>
-            <th class="px-3 py-2 font-semibold">Actor</th>
-            <th class="px-3 py-2 font-semibold">Source IP</th>
-            <th class="px-3 py-2 font-semibold">Detail</th>
-          </tr>
-        </thead>
-        <tbody id="auBody"></tbody>
-      </table>
-    </div>
+      <div id="issued" class="mb-5 hidden rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+        <div class="mb-1 text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">New token, copy it now</div>
+        <div class="flex items-center gap-2">
+          <code id="issuedTok" class="mono flex-1 select-all break-all rounded-lg bg-white/70 px-3 py-2 text-[13px] dark:bg-zinc-900/70"></code>
+          <button id="copyTok" type="button" class="rounded-lg border border-zinc-300 px-3 py-2 text-xs transition hover:border-amber-500 dark:border-zinc-700">Copy</button>
+        </div>
+        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Only the hash is stored. This value cannot be shown again.</p>
+      </div>
+
+      <div id="tokList" class="space-y-2"></div>
+    </section>
   </section>
 
-  <!-- Feedback -->
-  <section class="mt-8 rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
-    <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-      <h2 class="serif text-2xl tracking-tight">Feedback</h2>
-      <span class="text-xs text-zinc-400">Thumbs up/down on answers, with citations and latency at the time</span>
-    </div>
+  <!-- ══ Corpus ═════════════════════════════════════════════════════════ -->
+  <section data-panel="corpus" class="hidden space-y-8">
+    <section class="rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
+      <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="serif text-2xl tracking-tight">Corpus Ingestion</h2>
+        <span class="text-xs text-zinc-400">Upload a GR, then index it</span>
+      </div>
 
-    <div class="mb-4 flex flex-wrap items-center gap-2">
-      <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
-        <span class="text-[11px] uppercase tracking-wide text-zinc-400">Total</span>
-        <span id="fbTotal" class="mono ml-2 text-sm font-semibold">&mdash;</span>
-      </div>
-      <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-3 py-1.5">
-        <span class="text-[11px] uppercase tracking-wide text-emerald-600/80 dark:text-emerald-400/80">Up</span>
-        <span id="fbUp" class="mono ml-2 text-sm font-semibold text-emerald-600 dark:text-emerald-400">&mdash;</span>
-      </div>
-      <div class="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-1.5">
-        <span class="text-[11px] uppercase tracking-wide text-red-500/80">Down</span>
-        <span id="fbDown" class="mono ml-2 text-sm font-semibold text-red-600 dark:text-red-400">&mdash;</span>
-      </div>
-      <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-1.5">
-        <span class="text-[11px] uppercase tracking-wide text-amber-600/80 dark:text-amber-400/80">Satisfaction</span>
-        <span id="fbSat" class="mono ml-2 text-sm font-semibold text-amber-600 dark:text-amber-400">&mdash;</span>
-      </div>
-      <select id="fbFilter" class="ml-auto rounded-xl border border-zinc-300 bg-white/50 px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
-        <option value="">All feedback</option>
-        <option value="down">Downvotes only</option>
-        <option value="up">Upvotes only</option>
-      </select>
-      <button id="fbRefresh" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Refresh</button>
-    </div>
+      <label id="drop" for="pdf" class="mb-4 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-300 px-6 py-8 text-center transition hover:border-amber-500/60 dark:border-zinc-700">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="mb-2 text-zinc-400"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span id="dropMsg" class="text-sm text-zinc-500 dark:text-zinc-400">Drop a PDF here, or click to browse</span>
+        <input type="file" id="pdf" accept="application/pdf,.pdf" class="hidden">
+      </label>
 
-    <div class="max-h-96 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-      <table class="w-full text-left text-[12px]">
-        <thead class="sticky top-0 bg-zinc-50 dark:bg-zinc-900">
-          <tr class="text-[10px] uppercase tracking-wide text-zinc-500">
-            <th class="px-3 py-2 font-semibold">Time</th>
-            <th class="px-3 py-2 font-semibold"></th>
-            <th class="px-3 py-2 font-semibold">Officer</th>
-            <th class="px-3 py-2 font-semibold">Query</th>
-            <th class="px-3 py-2 font-semibold">Comment</th>
-            <th class="px-3 py-2 font-semibold">Model</th>
-          </tr>
-        </thead>
-        <tbody id="fbBody"></tbody>
-      </table>
-    </div>
-  </section>
+      <div class="flex flex-wrap items-center gap-2">
+        <select id="ingestDept" title="Department this document belongs to" class="w-56 rounded-xl border border-zinc-300 bg-white/50 px-3 py-2.5 text-sm transition focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700 dark:bg-zinc-900/50"></select>
+        <button id="ingestBtn" disabled class="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none dark:bg-amber-600 dark:hover:bg-amber-500">Upload &amp; Ingest</button>
+        <span class="text-xs text-zinc-400">Typically 1 to 3 minutes per document</span>
+      </div>
 
-  <!-- Unanswered questions -->
-  <section class="mt-8 rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
-    <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-      <h2 class="serif text-2xl tracking-tight">Unanswered Questions</h2>
-      <span class="text-xs text-zinc-400">Refused queries, grouped — what the corpus is missing, from real usage</span>
-    </div>
+      <pre id="ilog" class="mono mt-4 hidden max-h-56 overflow-auto whitespace-pre-wrap rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 text-[12px] leading-relaxed text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300"></pre>
 
-    <div class="mb-4 flex flex-wrap items-center gap-2">
-      <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
-        <span class="text-[11px] uppercase tracking-wide text-zinc-400">Queries</span>
-        <span id="gpTotal" class="mono ml-2 text-sm font-semibold">&mdash;</span>
+      <div class="mt-6 border-t border-zinc-200 pt-5 dark:border-zinc-800">
+        <div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+          <h3 class="text-sm font-semibold">Quarantine</h3>
+          <span class="text-xs text-zinc-400">Uploads stage here and are not searchable until promoted</span>
+        </div>
+        <p class="mb-3 text-[13px] text-zinc-500 dark:text-zinc-400">
+          An uploaded document is indexed into a separate collection. Officers querying the
+          portal cannot see it. Promoting copies it into the live corpus; discarding removes it
+          entirely. Both actions are recorded in the access log.
+        </p>
+        <div id="qList" class="space-y-2"></div>
       </div>
-      <div class="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-1.5">
-        <span class="text-[11px] uppercase tracking-wide text-red-500/80">Refused</span>
-        <span id="gpRefused" class="mono ml-2 text-sm font-semibold text-red-600 dark:text-red-400">&mdash;</span>
-      </div>
-      <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-1.5">
-        <span class="text-[11px] uppercase tracking-wide text-amber-600/80 dark:text-amber-400/80">Refusal rate</span>
-        <span id="gpRate" class="mono ml-2 text-sm font-semibold text-amber-600 dark:text-amber-400">&mdash;</span>
-      </div>
-      <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
-        <span class="text-[11px] uppercase tracking-wide text-zinc-400">Distinct gaps</span>
-        <span id="gpDistinct" class="mono ml-2 text-sm font-semibold">&mdash;</span>
-      </div>
-      <select id="gpDays" class="ml-auto rounded-xl border border-zinc-300 bg-white/50 px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
-        <option value="7">Last 7 days</option>
-        <option value="30" selected>Last 30 days</option>
-        <option value="90">Last 90 days</option>
-      </select>
-      <button id="gpExport" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Export CSV</button>
-      <button id="gpRefresh" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Refresh</button>
-    </div>
+    </section>
 
-    <div class="max-h-96 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-      <table class="w-full text-left text-[12px]">
-        <thead class="sticky top-0 bg-zinc-50 dark:bg-zinc-900">
-          <tr class="text-[10px] uppercase tracking-wide text-zinc-500">
-            <th class="px-3 py-2 font-semibold">Count</th>
-            <th class="px-3 py-2 font-semibold">Question</th>
-            <th class="px-3 py-2 font-semibold">Last asked</th>
-            <th class="px-3 py-2 font-semibold"></th>
-          </tr>
-        </thead>
-        <tbody id="gpBody"></tbody>
-      </table>
-    </div>
-  </section>
+    <!-- Citation graph -->
+    <section class="rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
+      <div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="serif text-2xl tracking-tight">Document Lineage</h2>
+        <button id="graphRebuild" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Rebuild</button>
+      </div>
+      <p id="graphSummary" class="mb-4 text-sm text-zinc-500 dark:text-zinc-400">Loading&hellip;</p>
 
-  <!-- Query analytics -->
-  <section class="mt-8 rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
-    <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-      <h2 class="serif text-2xl tracking-tight">Query Analytics</h2>
-      <span class="text-xs text-zinc-400">Volume, latency and what officers actually cite</span>
-    </div>
-
-    <div class="mb-4 flex flex-wrap items-center gap-2">
-      <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
-        <span class="text-[11px] uppercase tracking-wide text-zinc-400">Queries</span>
-        <span id="qaTotal" class="mono ml-2 text-sm font-semibold">&mdash;</span>
-      </div>
-      <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-1.5">
-        <span class="text-[11px] uppercase tracking-wide text-amber-600/80 dark:text-amber-400/80">Refusal rate</span>
-        <span id="qaRefusalRate" class="mono ml-2 text-sm font-semibold text-amber-600 dark:text-amber-400">&mdash;</span>
-      </div>
-      <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
-        <span class="text-[11px] uppercase tracking-wide text-zinc-400">p50 latency</span>
-        <span id="qaP50" class="mono ml-2 text-sm font-semibold">&mdash;</span>
-      </div>
-      <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
-        <span class="text-[11px] uppercase tracking-wide text-zinc-400">p95 latency</span>
-        <span id="qaP95" class="mono ml-2 text-sm font-semibold">&mdash;</span>
-      </div>
-      <select id="qaDays" class="ml-auto rounded-xl border border-zinc-300 bg-white/50 px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
-        <option value="7">Last 7 days</option>
-        <option value="30" selected>Last 30 days</option>
-        <option value="90">Last 90 days</option>
-      </select>
-      <button id="qaRefresh" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Refresh</button>
-    </div>
-
-    <div class="grid gap-4 md:grid-cols-2">
-      <div>
-        <div class="mb-2 text-[11px] uppercase tracking-wide text-zinc-400">Most-cited documents</div>
-        <div class="max-h-64 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table class="w-full text-left text-[12px]">
-            <tbody id="qaDocsBody"></tbody>
+      <div class="grid gap-4 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+        <div class="rounded-xl border border-zinc-200 p-2 dark:border-zinc-800">
+          <svg id="graphSvg" viewBox="0 0 320 320" class="h-auto w-full"></svg>
+          <div class="mt-1 flex items-center justify-center gap-3 text-[10px] text-zinc-400">
+            <span><span class="mr-1 inline-block h-px w-4 align-middle bg-amber-500"></span>supersedes</span>
+            <span><span class="mr-1 inline-block h-px w-4 align-middle bg-zinc-400"></span>references</span>
+            <span class="text-zinc-400">dashed = ambiguous</span>
+          </div>
+        </div>
+        <div class="max-h-80 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+          <table class="w-full text-left text-[13px]">
+            <thead class="sticky top-0 bg-zinc-50 dark:bg-zinc-900">
+              <tr class="text-[11px] uppercase tracking-wide text-zinc-500">
+                <th class="px-3 py-2.5 font-semibold">From</th>
+                <th class="px-3 py-2.5 font-semibold">Relation</th>
+                <th class="px-3 py-2.5 font-semibold">To</th>
+                <th class="px-3 py-2.5 font-semibold">Confidence</th>
+              </tr>
+            </thead>
+            <tbody id="graphBody"></tbody>
           </table>
         </div>
       </div>
-      <div>
-        <div class="mb-2 text-[11px] uppercase tracking-wide text-zinc-400">Answers by model</div>
-        <div class="max-h-64 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table class="w-full text-left text-[12px]">
-            <tbody id="qaModelBody"></tbody>
-          </table>
+    </section>
+  </section>
+
+  <!-- ══ Activity ═══════════════════════════════════════════════════════ -->
+  <section data-panel="activity" class="hidden space-y-8">
+    <!-- Access log -->
+    <section class="rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
+      <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="serif text-2xl tracking-tight">Access Log</h2>
+        <span class="text-xs text-zinc-400">Append-only. Every authentication, query and corpus change</span>
+      </div>
+
+      <div class="mb-4 flex flex-wrap items-center gap-2">
+        <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
+          <span class="text-[11px] uppercase tracking-wide text-zinc-400">Total</span>
+          <span id="auTotal" class="mono ml-2 text-sm font-semibold">&mdash;</span>
+        </div>
+        <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
+          <span class="text-[11px] uppercase tracking-wide text-zinc-400">Last 24h</span>
+          <span id="au24" class="mono ml-2 text-sm font-semibold">&mdash;</span>
+        </div>
+        <div class="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-1.5">
+          <span class="text-[11px] uppercase tracking-wide text-red-500/80">Denied</span>
+          <span id="auDenied" class="mono ml-2 text-sm font-semibold text-red-600 dark:text-red-400">&mdash;</span>
+        </div>
+        <select id="auFilter" class="ml-auto rounded-xl border border-zinc-300 bg-white/50 px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+          <option value="">All events</option>
+          <option value="query">Queries</option>
+          <option value="auth.login">Officer logins</option>
+          <option value="auth.denied">Denied attempts</option>
+          <option value="admin.login">Admin logins</option>
+          <option value="token.issued">Tokens issued</option>
+          <option value="token.revoked">Tokens revoked</option>
+          <option value="document.uploaded">Uploads</option>
+          <option value="document.ingested">Ingestions</option>
+        </select>
+        <button id="auRefresh" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Refresh</button>
+      </div>
+
+      <div class="max-h-96 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <table class="w-full text-left text-[13px]">
+          <thead class="sticky top-0 bg-zinc-50 dark:bg-zinc-900">
+            <tr class="text-[11px] uppercase tracking-wide text-zinc-500">
+              <th class="px-3 py-2.5 font-semibold">Time</th>
+              <th class="px-3 py-2.5 font-semibold">Event</th>
+              <th class="px-3 py-2.5 font-semibold">Actor</th>
+              <th class="px-3 py-2.5 font-semibold">Source IP</th>
+              <th class="px-3 py-2.5 font-semibold">Detail</th>
+            </tr>
+          </thead>
+          <tbody id="auBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Feedback -->
+    <section class="rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
+      <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="serif text-2xl tracking-tight">Feedback</h2>
+        <span class="text-xs text-zinc-400">Thumbs up/down on answers, with citations and latency at the time</span>
+      </div>
+
+      <div class="mb-4 flex flex-wrap items-center gap-2">
+        <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
+          <span class="text-[11px] uppercase tracking-wide text-zinc-400">Total</span>
+          <span id="fbTotal" class="mono ml-2 text-sm font-semibold">&mdash;</span>
+        </div>
+        <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-3 py-1.5">
+          <span class="text-[11px] uppercase tracking-wide text-emerald-600/80 dark:text-emerald-400/80">Up</span>
+          <span id="fbUp" class="mono ml-2 text-sm font-semibold text-emerald-600 dark:text-emerald-400">&mdash;</span>
+        </div>
+        <div class="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-1.5">
+          <span class="text-[11px] uppercase tracking-wide text-red-500/80">Down</span>
+          <span id="fbDown" class="mono ml-2 text-sm font-semibold text-red-600 dark:text-red-400">&mdash;</span>
+        </div>
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-1.5">
+          <span class="text-[11px] uppercase tracking-wide text-amber-600/80 dark:text-amber-400/80">Satisfaction</span>
+          <span id="fbSat" class="mono ml-2 text-sm font-semibold text-amber-600 dark:text-amber-400">&mdash;</span>
+        </div>
+        <select id="fbFilter" class="ml-auto rounded-xl border border-zinc-300 bg-white/50 px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+          <option value="">All feedback</option>
+          <option value="down">Downvotes only</option>
+          <option value="up">Upvotes only</option>
+        </select>
+        <button id="fbRefresh" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Refresh</button>
+      </div>
+
+      <div class="max-h-96 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <table class="w-full text-left text-[13px]">
+          <thead class="sticky top-0 bg-zinc-50 dark:bg-zinc-900">
+            <tr class="text-[11px] uppercase tracking-wide text-zinc-500">
+              <th class="px-3 py-2.5 font-semibold">Time</th>
+              <th class="px-3 py-2.5 font-semibold"></th>
+              <th class="px-3 py-2.5 font-semibold">Officer</th>
+              <th class="px-3 py-2.5 font-semibold">Query</th>
+              <th class="px-3 py-2.5 font-semibold">Comment</th>
+              <th class="px-3 py-2.5 font-semibold">Model</th>
+            </tr>
+          </thead>
+          <tbody id="fbBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <!-- ══ Insights ═══════════════════════════════════════════════════════ -->
+  <section data-panel="insights" class="hidden space-y-8">
+    <!-- Unanswered questions -->
+    <section class="rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
+      <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="serif text-2xl tracking-tight">Unanswered Questions</h2>
+        <span class="text-xs text-zinc-400">Refused queries, grouped — what the corpus is missing, from real usage</span>
+      </div>
+
+      <div class="mb-4 flex flex-wrap items-center gap-2">
+        <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
+          <span class="text-[11px] uppercase tracking-wide text-zinc-400">Queries</span>
+          <span id="gpTotal" class="mono ml-2 text-sm font-semibold">&mdash;</span>
+        </div>
+        <div class="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-1.5">
+          <span class="text-[11px] uppercase tracking-wide text-red-500/80">Refused</span>
+          <span id="gpRefused" class="mono ml-2 text-sm font-semibold text-red-600 dark:text-red-400">&mdash;</span>
+        </div>
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-1.5">
+          <span class="text-[11px] uppercase tracking-wide text-amber-600/80 dark:text-amber-400/80">Refusal rate</span>
+          <span id="gpRate" class="mono ml-2 text-sm font-semibold text-amber-600 dark:text-amber-400">&mdash;</span>
+        </div>
+        <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
+          <span class="text-[11px] uppercase tracking-wide text-zinc-400">Distinct gaps</span>
+          <span id="gpDistinct" class="mono ml-2 text-sm font-semibold">&mdash;</span>
+        </div>
+        <select id="gpDays" class="ml-auto rounded-xl border border-zinc-300 bg-white/50 px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <button id="gpExport" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Export CSV</button>
+        <button id="gpRefresh" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Refresh</button>
+      </div>
+
+      <div class="max-h-96 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <table class="w-full text-left text-[13px]">
+          <thead class="sticky top-0 bg-zinc-50 dark:bg-zinc-900">
+            <tr class="text-[11px] uppercase tracking-wide text-zinc-500">
+              <th class="px-3 py-2.5 font-semibold">Count</th>
+              <th class="px-3 py-2.5 font-semibold">Question</th>
+              <th class="px-3 py-2.5 font-semibold">Last asked</th>
+              <th class="px-3 py-2.5 font-semibold"></th>
+            </tr>
+          </thead>
+          <tbody id="gpBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Query analytics -->
+    <section class="rounded-3xl border border-zinc-200/90 bg-white/60 p-6 backdrop-blur dark:border-zinc-800/80 dark:bg-[#10151f]/50">
+      <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="serif text-2xl tracking-tight">Query Analytics</h2>
+        <span class="text-xs text-zinc-400">Volume, latency and what officers actually cite</span>
+      </div>
+
+      <div class="mb-4 flex flex-wrap items-center gap-2">
+        <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
+          <span class="text-[11px] uppercase tracking-wide text-zinc-400">Queries</span>
+          <span id="qaTotal" class="mono ml-2 text-sm font-semibold">&mdash;</span>
+        </div>
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-1.5">
+          <span class="text-[11px] uppercase tracking-wide text-amber-600/80 dark:text-amber-400/80">Refusal rate</span>
+          <span id="qaRefusalRate" class="mono ml-2 text-sm font-semibold text-amber-600 dark:text-amber-400">&mdash;</span>
+        </div>
+        <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
+          <span class="text-[11px] uppercase tracking-wide text-zinc-400">p50 latency</span>
+          <span id="qaP50" class="mono ml-2 text-sm font-semibold">&mdash;</span>
+        </div>
+        <div class="rounded-xl border border-zinc-200 px-3 py-1.5 dark:border-zinc-800">
+          <span class="text-[11px] uppercase tracking-wide text-zinc-400">p95 latency</span>
+          <span id="qaP95" class="mono ml-2 text-sm font-semibold">&mdash;</span>
+        </div>
+        <select id="qaDays" class="ml-auto rounded-xl border border-zinc-300 bg-white/50 px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <button id="qaRefresh" class="rounded-xl border border-zinc-300 px-3 py-1.5 text-xs transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Refresh</button>
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <div>
+          <div class="mb-2 text-[11px] uppercase tracking-wide text-zinc-400">Most-cited documents</div>
+          <div class="max-h-64 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <table class="w-full text-left text-[13px]">
+              <tbody id="qaDocsBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="mb-2 text-[11px] uppercase tracking-wide text-zinc-400">Answers by model</div>
+          <div class="max-h-64 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <table class="w-full text-left text-[13px]">
+              <tbody id="qaModelBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   </section>
 
 </main>
@@ -418,6 +474,11 @@ let DEPTS=[],DEFAULT_DEPT='';
 const deptLabel=d=>d==='ALL'?'All departments':String(d).replace(/_/g,' ');
 
 const api=(p,o={})=>fetch(p,{...o,headers:{'Authorization':'Bearer '+TOK,...(o.body?{'Content-Type':'application/json'}:{}),...(o.headers||{})}});
+
+// Placeholder rows/blocks shown while a panel's first fetch is in flight.
+const skelRows=(cols,n=4)=>Array.from({length:n},()=>
+  `<tr class="border-t border-zinc-100 dark:border-zinc-800/70">`+
+  `<td class="px-3 py-2.5" colspan="${cols}"><div class="skel h-4 w-full"></div></td></tr>`).join('');
 
 async function loadDepartments(){
   try{
@@ -445,12 +506,63 @@ $('gateForm').onsubmit=async e=>{
 
 $('lock').onclick=()=>{sessionStorage.removeItem('mimir.admin');location.reload();};
 
-async function open_(){$('gate').classList.add('hidden');$('console').classList.remove('hidden');await loadDepartments();refresh();}
+async function open_(){$('gate').classList.add('hidden');$('console').classList.remove('hidden');await loadDepartments();showTab('overview');}
+
+/* ── tabs ─────────────────────────────────────────────── */
+// A panel fetches on first view rather than everything on unlock. The console previously
+// fired eight requests the moment it opened — including a component probe and a lineage
+// rebuild — so it sat on placeholder dashes for as long as the slowest one took.
+const TAB_LOADERS={
+  overview:[loadStats,loadTopology,loadAudit],
+  deployment:[loadTopology],
+  access:[loadTokens],
+  corpus:[loadQuarantine,loadGraph],
+  activity:[loadAudit,loadFeedback],
+  insights:[loadGaps,loadQueryAnalytics]
+};
+let CURRENT='overview';
+
+// Re-fetches every time a panel is opened rather than caching the first result. This is a
+// live operations console — a cached panel would show an officer a token it had already
+// issued, or a quarantine queue it had already drained. The skeletons cover the wait.
+function showTab(name){
+  if(!TAB_LOADERS[name])return;
+  CURRENT=name;
+  document.querySelectorAll('[data-panel]').forEach(p=>p.classList.toggle('hidden',p.dataset.panel!==name));
+  document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===name)));
+  TAB_LOADERS[name].forEach(fn=>fn());
+}
+
+$('tabs').onclick=e=>{const b=e.target.closest('button[data-tab]');if(b)showTab(b.dataset.tab);};
+// "Full topology →" / "Full access log →" links on the overview cards.
+$('console').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-goto]');
+  if(b){showTab(b.dataset.goto);window.scrollTo({top:0,behavior:'smooth'});}
+});
+
+// Re-runs whatever is on screen, plus the headline counts. Used after any action that
+// changes state — issuing a token, promoting a document, finishing an ingest.
+function refresh(){
+  const fns=new Set(TAB_LOADERS[CURRENT]||[]);
+  fns.add(loadStats);
+  fns.forEach(fn=>fn());
+}
+
+/* ── stats ────────────────────────────────────────────── */
+async function loadStats(){
+  try{
+    const s=await(await api('/api/admin/stats')).json();
+    $('stChunks').textContent=s.chunks==null?'n/a':s.chunks.toLocaleString();
+    $('stPdfs').textContent=(s.files!=null?s.files:s.pdfs).toLocaleString();
+    $('stBreak').textContent=(s.documents?s.documents+' documents · '+s.pdfs+' PDF, '+s.translated_docs+' translated':'');
+    $('stOfficers').textContent=s.officers;
+  }catch(_){}
+}
 
 /* ── deployment topology ──────────────────────────────── */
 async function loadTopology(){
   const body=$('topoBody'),sum=$('topoSummary');
-  body.innerHTML='<tr><td colspan="5" class="px-3 py-6 text-center text-zinc-400">Probing&hellip;</td></tr>';
+  body.innerHTML=skelRows(5);
   try{
     const d=await(await api('/api/admin/topology')).json();
     const cs=d.components||[];
@@ -459,10 +571,17 @@ async function loadTopology(){
     const modeChip=dep.mode==='sovereign'
       ? '<span class="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">SOVEREIGN</span>'
       : '<span class="rounded-md bg-zinc-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-500">HYBRID</span>';
-    sum.innerHTML=`<span class="font-medium text-zinc-700 dark:text-zinc-300">${d.self_hosted} of ${cs.length} components run on our own infrastructure.</span> `+
-      (d.generation_provider==='local'
-        ? 'Generation is running on a self-hosted model, so no query text leaves the network.'
-        : 'Generation is the only third-party call. Setting <code class="mono rounded bg-zinc-100 px-1 dark:bg-zinc-800">GEN_PROVIDER=local</code> moves it on-premise.')
+    const genLine=d.generation_provider==='local'
+      ? 'Generation is running on a self-hosted model, so no query text leaves the network.'
+      : 'Generation is the only third-party call. Setting <code class="mono rounded bg-zinc-100 px-1 dark:bg-zinc-800">GEN_PROVIDER=local</code> moves it on-premise.';
+
+    // Overview card: the headline claim only.
+    $('stSelf').textContent=`${d.self_hosted}/${cs.length}`;
+    $('ovMode').innerHTML=modeChip;
+    $('ovDeploy').innerHTML=`<span class="font-medium text-zinc-700 dark:text-zinc-300">${d.self_hosted} of ${cs.length} components run on our own infrastructure.</span> ${genLine}`;
+
+    // Deployment tab: the same claim plus the exact configuration behind it.
+    sum.innerHTML=`<span class="font-medium text-zinc-700 dark:text-zinc-300">${d.self_hosted} of ${cs.length} components run on our own infrastructure.</span> `+genLine
       +` <br><span class="mt-1 inline-flex items-center gap-1.5 text-xs text-zinc-400">Deployment mode: ${modeChip} `
       +`<span class="mono">ingest structuring=${esc(dep.ingest_structure||'?')} &middot; ingest translation=${esc(dep.ingest_translate||'?')} &middot; PDF OCR tier 2=${esc(dep.pdf_parse_tier2||'?')}</span></span>`
       +` <br><span class="mt-1 inline-flex items-center gap-1.5 text-xs text-zinc-400">Effective config: `
@@ -475,17 +594,18 @@ async function loadTopology(){
         ? '<span class="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Self-hosted</span>'
         : '<span class="rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">Third-party</span>';
       return `<tr class="border-t border-zinc-100 dark:border-zinc-800/70">
-        <td class="px-3 py-2"><div class="font-medium">${esc(c.name)}</div><div class="text-[11px] text-zinc-400">${esc(c.role)}</div></td>
-        <td class="mono px-3 py-2 text-zinc-600 dark:text-zinc-400">${esc(c.tech)}</td>
-        <td class="mono px-3 py-2 text-zinc-500">${esc(c.host||'—')}</td>
-        <td class="px-3 py-2">${badge}</td>
-        <td class="whitespace-nowrap px-3 py-2">
+        <td class="px-3 py-2.5"><div class="font-medium">${esc(c.name)}</div><div class="text-[11px] text-zinc-400">${esc(c.role)}</div></td>
+        <td class="mono px-3 py-2.5 text-zinc-600 dark:text-zinc-400">${esc(c.tech)}</td>
+        <td class="mono px-3 py-2.5 text-zinc-500">${esc(c.host||'—')}</td>
+        <td class="px-3 py-2.5">${badge}</td>
+        <td class="whitespace-nowrap px-3 py-2.5">
           <span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${dot}"></span>
           <span class="${up?'text-zinc-500':'text-red-500'}" title="${esc(c.detail||'')}">${esc(stat)}</span>
         </td>
       </tr>`;}).join('');
   }catch(_){
     sum.textContent='Could not probe the deployment.';
+    $('ovDeploy').textContent='Could not probe the deployment.';
     body.innerHTML='<tr><td colspan="5" class="px-3 py-6 text-center text-red-500">Probe failed.</td></tr>';
   }
 }
@@ -497,7 +617,7 @@ async function loadQuarantine(){
   try{
     const d=await(await api('/api/admin/quarantine')).json();
     const list=d.documents||[];
-    if(!list.length){box.innerHTML='<p class="py-3 text-center text-[12px] text-zinc-400">Nothing staged. Uploads appear here for review.</p>';return;}
+    if(!list.length){box.innerHTML='<p class="py-3 text-center text-[13px] text-zinc-400">Nothing staged. Uploads appear here for review.</p>';return;}
     box.innerHTML=list.map(f=>`
       <div class="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-2.5">
         <div class="min-w-0 flex-1">
@@ -507,7 +627,7 @@ async function loadQuarantine(){
         <button data-q="promote" data-f="${esc(f.filename)}" class="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-400">Promote</button>
         <button data-q="discard" data-f="${esc(f.filename)}" class="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs text-red-600 transition hover:border-red-500 dark:border-zinc-700 dark:text-red-400">Discard</button>
       </div>`).join('');
-  }catch(_){box.innerHTML='<p class="py-3 text-center text-[12px] text-red-500">Could not load quarantine.</p>';}
+  }catch(_){box.innerHTML='<p class="py-3 text-center text-[13px] text-red-500">Could not load quarantine.</p>';}
 }
 
 $('qList').onclick=async e=>{
@@ -549,6 +669,7 @@ function drawGraph(nodes,edges){
 
 async function loadGraph(){
   const sum=$('graphSummary'),body=$('graphBody');
+  body.innerHTML=skelRows(4,3);
   try{
     const d=await(await api('/api/admin/graph')).json();
     const s=d.stats||{},edges=d.edges||[],nodes=d.nodes||[];
@@ -563,14 +684,14 @@ async function loadGraph(){
     const byId=Object.fromEntries(nodes.map(n=>[n.id,n]));
     const nm=id=>esc((byId[id]||{}).number||id);
     body.innerHTML=edges.map(e=>`<tr class="border-t border-zinc-100 dark:border-zinc-800/70">
-      <td class="mono px-3 py-2">${nm(e.source)}</td>
-      <td class="px-3 py-2">${e.kind==='supersedes'
+      <td class="mono px-3 py-2.5">${nm(e.source)}</td>
+      <td class="px-3 py-2.5">${e.kind==='supersedes'
         ? '<span class="rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">supersedes</span>'
         : '<span class="text-zinc-500">references</span>'}</td>
-      <td class="mono px-3 py-2">${nm(e.target)}</td>
-      <td class="px-3 py-2 text-zinc-500">${esc(e.confidence)}</td>
+      <td class="mono px-3 py-2.5">${nm(e.target)}</td>
+      <td class="px-3 py-2.5 text-zinc-500">${esc(e.confidence)}</td>
     </tr>`).join('');
-  }catch(_){sum.textContent='Could not load the lineage graph.';}
+  }catch(_){sum.textContent='Could not load the lineage graph.';body.innerHTML='';}
 }
 
 $('graphRebuild').onclick=async e=>{
@@ -607,25 +728,46 @@ const EV={
 
 async function loadAudit(){
   const body=$('auBody');
+  const ev=$('auFilter').value;
+  body.innerHTML=skelRows(5);
+  if(!ev)$('ovActivity').innerHTML='<div class="skel h-5 w-full"></div>'.repeat(4);
   try{
-    const ev=$('auFilter').value;
     const d=await(await api('/api/admin/audit?limit=200'+(ev?'&event='+encodeURIComponent(ev):''))).json();
     const s=d.summary||{};
     $('auTotal').textContent=(s.total||0).toLocaleString();
     $('au24').textContent=(s.last_24h||0).toLocaleString();
     $('auDenied').textContent=(s.denied||0).toLocaleString();
     const rows=d.entries||[];
+
+    // The overview preview reads from the same response rather than a second request. It
+    // only tracks the unfiltered view, so narrowing the log below does not quietly rewrite
+    // what "recent activity" means on the overview.
+    if(!ev){
+      $('ovActivity').innerHTML=rows.length
+        ? rows.slice(0,6).map(r=>{
+            const m=EV[r.event]||[r.event,'bg-zinc-500/10 text-zinc-500'];
+            return `<div class="flex items-center gap-2 text-[13px]">
+              <span class="w-16 shrink-0 text-zinc-400">${esc(rel(r.ts))}</span>
+              <span class="shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium ${m[1]}">${esc(m[0])}</span>
+              <span class="truncate text-zinc-600 dark:text-zinc-400">${esc(r.actor||'—')}</span>
+            </div>`;}).join('')
+        : '<p class="py-3 text-[13px] text-zinc-400">No activity recorded yet.</p>';
+    }
+
     if(!rows.length){body.innerHTML='<tr><td colspan="5" class="px-3 py-6 text-center text-zinc-400">No activity recorded yet.</td></tr>';return;}
     body.innerHTML=rows.map(r=>{
       const m=EV[r.event]||[r.event,'bg-zinc-500/10 text-zinc-500'];
       return `<tr class="border-t border-zinc-100 dark:border-zinc-800/70">
-        <td class="whitespace-nowrap px-3 py-2 text-zinc-500">${esc(rel(r.ts))}</td>
-        <td class="whitespace-nowrap px-3 py-2"><span class="rounded-md px-2 py-0.5 text-[11px] font-medium ${m[1]}">${esc(m[0])}</span></td>
-        <td class="whitespace-nowrap px-3 py-2">${esc(r.actor||'\u2014')}</td>
-        <td class="mono whitespace-nowrap px-3 py-2 text-zinc-500">${esc(r.ip||'\u2014')}</td>
-        <td class="px-3 py-2 text-zinc-600 dark:text-zinc-400"><div class="max-w-md truncate" title="${esc(r.detail||'')}">${esc(r.detail||'')}</div></td>
+        <td class="whitespace-nowrap px-3 py-2.5 text-zinc-500">${esc(rel(r.ts))}</td>
+        <td class="whitespace-nowrap px-3 py-2.5"><span class="rounded-md px-2 py-0.5 text-[11px] font-medium ${m[1]}">${esc(m[0])}</span></td>
+        <td class="whitespace-nowrap px-3 py-2.5">${esc(r.actor||'\u2014')}</td>
+        <td class="mono whitespace-nowrap px-3 py-2.5 text-zinc-500">${esc(r.ip||'\u2014')}</td>
+        <td class="px-3 py-2.5 text-zinc-600 dark:text-zinc-400"><div class="max-w-md truncate" title="${esc(r.detail||'')}">${esc(r.detail||'')}</div></td>
       </tr>`;}).join('');
-  }catch(_){body.innerHTML='<tr><td colspan="5" class="px-3 py-6 text-center text-red-500">Could not load the access log.</td></tr>';}
+  }catch(_){
+    body.innerHTML='<tr><td colspan="5" class="px-3 py-6 text-center text-red-500">Could not load the access log.</td></tr>';
+    if(!ev)$('ovActivity').innerHTML='<p class="py-3 text-[13px] text-red-500">Could not load the access log.</p>';
+  }
 }
 $('auFilter').onchange=loadAudit;
 $('auRefresh').onclick=loadAudit;
@@ -633,6 +775,7 @@ $('auRefresh').onclick=loadAudit;
 /* ── feedback ─────────────────────────────────────────── */
 async function loadFeedback(){
   const body=$('fbBody');
+  body.innerHTML=skelRows(6);
   try{
     const v=$('fbFilter').value;
     const d=await(await api('/api/admin/feedback?limit=200'+(v?'&verdict='+encodeURIComponent(v):''))).json();
@@ -646,12 +789,12 @@ async function loadFeedback(){
     body.innerHTML=rows.map(r=>{
       const dot=r.verdict==='up'?'bg-emerald-500':'bg-red-500';
       return `<tr class="border-t border-zinc-100 dark:border-zinc-800/70">
-        <td class="whitespace-nowrap px-3 py-2 text-zinc-500">${esc(rel(r.ts))}</td>
-        <td class="px-3 py-2"><span class="inline-block h-2 w-2 rounded-full ${dot}"></span></td>
-        <td class="whitespace-nowrap px-3 py-2">${esc(r.actor||'—')}</td>
-        <td class="px-3 py-2 text-zinc-600 dark:text-zinc-400"><div class="max-w-xs truncate" title="${esc(r.query||'')}">${esc(r.query||'')}</div></td>
-        <td class="px-3 py-2 text-zinc-600 dark:text-zinc-400"><div class="max-w-xs truncate" title="${esc(r.comment||'')}">${esc(r.comment||'—')}</div></td>
-        <td class="mono whitespace-nowrap px-3 py-2 text-zinc-500">${esc(r.model||'—')}</td>
+        <td class="whitespace-nowrap px-3 py-2.5 text-zinc-500">${esc(rel(r.ts))}</td>
+        <td class="px-3 py-2.5"><span class="inline-block h-2 w-2 rounded-full ${dot}"></span></td>
+        <td class="whitespace-nowrap px-3 py-2.5">${esc(r.actor||'—')}</td>
+        <td class="px-3 py-2.5 text-zinc-600 dark:text-zinc-400"><div class="max-w-xs truncate" title="${esc(r.query||'')}">${esc(r.query||'')}</div></td>
+        <td class="px-3 py-2.5 text-zinc-600 dark:text-zinc-400"><div class="max-w-xs truncate" title="${esc(r.comment||'')}">${esc(r.comment||'—')}</div></td>
+        <td class="mono whitespace-nowrap px-3 py-2.5 text-zinc-500">${esc(r.model||'—')}</td>
       </tr>`;}).join('');
   }catch(_){body.innerHTML='<tr><td colspan="6" class="px-3 py-6 text-center text-red-500">Could not load feedback.</td></tr>';}
 }
@@ -662,6 +805,7 @@ $('fbRefresh').onclick=loadFeedback;
 let _gapGroups=[];
 async function loadGaps(){
   const body=$('gpBody');
+  body.innerHTML=skelRows(4);
   try{
     const days=$('gpDays').value;
     const d=await(await api('/api/admin/gaps?limit=100&days='+encodeURIComponent(days))).json();
@@ -674,13 +818,13 @@ async function loadGaps(){
     if(!_gapGroups.length){body.innerHTML='<tr><td colspan="4" class="px-3 py-6 text-center text-zinc-400">No refused queries in this window. Either the corpus is covering everything asked, or nothing has been asked yet.</td></tr>';return;}
     body.innerHTML=_gapGroups.map((g,i)=>`
       <tr class="border-t border-zinc-100 dark:border-zinc-800/70">
-        <td class="mono px-3 py-2 font-semibold text-red-600 dark:text-red-400">${g.count}</td>
-        <td class="px-3 py-2"><div class="max-w-lg truncate" title="${esc(g.query_norm)}">${esc(g.query_norm)}</div></td>
-        <td class="whitespace-nowrap px-3 py-2 text-zinc-500">${esc(rel(g.last_seen))}</td>
-        <td class="whitespace-nowrap px-3 py-2"><button data-gp="${i}" class="gpToggle rounded-md border border-zinc-300 px-2 py-0.5 text-[11px] transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Examples</button></td>
+        <td class="mono px-3 py-2.5 font-semibold text-red-600 dark:text-red-400">${g.count}</td>
+        <td class="px-3 py-2.5"><div class="max-w-lg truncate" title="${esc(g.query_norm)}">${esc(g.query_norm)}</div></td>
+        <td class="whitespace-nowrap px-3 py-2.5 text-zinc-500">${esc(rel(g.last_seen))}</td>
+        <td class="whitespace-nowrap px-3 py-2.5"><button data-gp="${i}" class="gpToggle rounded-md border border-zinc-300 px-2 py-0.5 text-[11px] transition hover:border-amber-500 hover:text-amber-600 dark:border-zinc-700 dark:hover:text-amber-400">Examples</button></td>
       </tr>
       <tr id="gpEx${i}" class="hidden border-t border-zinc-100 bg-zinc-50/60 dark:border-zinc-800/70 dark:bg-zinc-900/30">
-        <td colspan="4" class="px-3 py-2">
+        <td colspan="4" class="px-3 py-2.5">
           ${g.examples.map(e=>`<div class="mb-1 last:mb-0"><span class="text-zinc-400">${esc(rel(e.ts))}</span> &middot; <span class="text-zinc-500">${esc(e.actor||'unknown officer')}</span> &middot; ${esc(e.query)}</div>`).join('')}
         </td>
       </tr>`).join('');
@@ -704,6 +848,7 @@ $('gpExport').onclick=()=>{
 /* ── query analytics ──────────────────────────────────── */
 async function loadQueryAnalytics(){
   const docsBody=$('qaDocsBody'),modelBody=$('qaModelBody');
+  docsBody.innerHTML=skelRows(2,3);modelBody.innerHTML=skelRows(2,3);
   try{
     const days=$('qaDays').value;
     const d=await(await api('/api/admin/query-analytics?days='+encodeURIComponent(days))).json();
@@ -714,14 +859,14 @@ async function loadQueryAnalytics(){
 
     const docs=d.top_documents||[];
     docsBody.innerHTML=docs.length?docs.map(r=>`<tr class="border-t border-zinc-100 dark:border-zinc-800/70">
-        <td class="px-3 py-2"><div class="max-w-[220px] truncate" title="${esc(r.document)}">${esc(r.document)}</div></td>
-        <td class="mono whitespace-nowrap px-3 py-2 text-right text-zinc-500">${r.count}</td>
+        <td class="px-3 py-2.5"><div class="max-w-[220px] truncate" title="${esc(r.document)}">${esc(r.document)}</div></td>
+        <td class="mono whitespace-nowrap px-3 py-2.5 text-right text-zinc-500">${r.count}</td>
       </tr>`).join('') : '<tr><td class="px-3 py-6 text-center text-zinc-400">No citations recorded yet.</td></tr>';
 
     const models=d.by_model||[];
     modelBody.innerHTML=models.length?models.map(r=>`<tr class="border-t border-zinc-100 dark:border-zinc-800/70">
-        <td class="mono px-3 py-2">${esc(r.model)}</td>
-        <td class="mono whitespace-nowrap px-3 py-2 text-right text-zinc-500">${r.count}</td>
+        <td class="mono px-3 py-2.5">${esc(r.model)}</td>
+        <td class="mono whitespace-nowrap px-3 py-2.5 text-right text-zinc-500">${r.count}</td>
       </tr>`).join('') : '<tr><td class="px-3 py-6 text-center text-zinc-400">No queries recorded yet.</td></tr>';
   }catch(_){
     docsBody.innerHTML='<tr><td class="px-3 py-6 text-center text-red-500">Could not load analytics.</td></tr>';
@@ -731,34 +876,17 @@ async function loadQueryAnalytics(){
 $('qaDays').onchange=loadQueryAnalytics;
 $('qaRefresh').onclick=loadQueryAnalytics;
 
-/* ── stats + tokens ───────────────────────────────────── */
-async function refresh(){
-  try{
-    const s=await(await api('/api/admin/stats')).json();
-    $('stChunks').textContent=s.chunks==null?'n/a':s.chunks.toLocaleString();
-    $('stPdfs').textContent=(s.files!=null?s.files:s.pdfs).toLocaleString();
-    $('stBreak').textContent=(s.documents?s.documents+' documents · '+s.pdfs+' PDF, '+s.translated_docs+' translated':'');
-    $('stOfficers').textContent=s.officers;
-  }catch(_){}
-  loadTokens();
-  loadAudit();
-  loadFeedback();
-  loadGaps();
-  loadQueryAnalytics();
-  loadTopology();
-  loadGraph();
-  loadQuarantine();
-}
-
+/* ── officer tokens ───────────────────────────────────── */
 async function loadTokens(){
   const box=$('tokList');
+  box.innerHTML='<div class="skel h-14 w-full"></div><div class="skel mt-2 h-14 w-full"></div>';
   try{
     const d=await(await api('/api/admin/tokens')).json();
     const list=d.tokens||[];
     if(!list.length){box.innerHTML='<p class="py-4 text-center text-sm text-zinc-400">No officers provisioned yet.</p>';return;}
     const deptOpts=DEPTS.map(x=>`<option value="${esc(x)}">${esc(deptLabel(x))}</option>`).join('');
     box.innerHTML=list.map(t=>`
-      <div class="fadein flex items-center gap-3 rounded-xl border border-zinc-200 bg-white/50 px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/40">
+      <div class="fadein flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200 bg-white/50 px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/40">
         <div class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-500/10 text-[11px] font-semibold text-amber-600 dark:text-amber-400">${esc((t.label||'?').trim().charAt(0).toUpperCase())}</div>
         <div class="min-w-0 flex-1">
           <div class="truncate text-sm font-medium">${esc(t.label||'Unnamed')}</div>
@@ -776,7 +904,6 @@ async function loadTokens(){
 $('tokList').onchange=async e=>{
   const sel=e.target.closest('select[data-act="dept"]');if(!sel)return;
   await api('/api/admin/tokens/'+sel.dataset.h,{method:'PUT',body:JSON.stringify({department:sel.value})});
-  loadAudit();
 };
 
 $('tokList').onclick=async e=>{

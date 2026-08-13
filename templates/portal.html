@@ -5,22 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MahaGov Officer Portal</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f59e0b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M2.5 16.88a1 1 0 0 1-.32-1.43l9-13.02a1 1 0 0 1 1.64 0l9 13.01a1 1 0 0 1-.32 1.44l-8.51 4.86a2 2 0 0 1-1.98 0Z'/><path d='M12 2v20'/></svg>">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-<style type="text/tailwindcss">
-  @custom-variant dark (&:where(.dark, .dark *));
-  /* Cool yellow-tinted neutral palette: re-tints the zinc + slate ramps with a subtle golden hint (blue > red)
-     so the whole app reads as a deep, cool blue-gray — not brown, not flat gray. Reversible. */
-  @theme {
-    --color-zinc-50:#f5f7fa; --color-zinc-100:#eef1f6; --color-zinc-200:#e0e5ee; --color-zinc-300:#cbd3e1;
-    --color-zinc-400:#93a0b5; --color-zinc-500:#64718a; --color-zinc-600:#475066; --color-zinc-700:#353d50;
-    --color-zinc-800:#222838; --color-zinc-900:#161b28; --color-zinc-950:#0d1119;
-    --color-slate-100:#eef1f6; --color-slate-200:#e0e5ee; --color-slate-300:#cbd3e1; --color-slate-400:#93a0b5;
-    --color-slate-500:#64718a; --color-slate-600:#475066; --color-slate-700:#353d50; --color-slate-800:#222838;
-    --color-slate-900:#141a27;
-  }
+<link rel="stylesheet" href="/assets/app.css">
+<style>
   body{font-family:'Geist',system-ui,sans-serif}
   @keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
   .dot{animation:blink 1.4s infinite both}.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}
@@ -30,6 +16,7 @@
   .dissolving{animation:dissolve .75s ease forwards;pointer-events:none}
   ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:rgba(120,120,135,.3);border-radius:8px}
   .serif{font-family:'Instrument Serif','Spectral',Georgia,serif;font-weight:400}
+  .mono{font-family:'Geist Mono',ui-monospace,monospace}
   .bg-grid{background-image:radial-gradient(rgba(100,116,139,.12) 1px,transparent 1px);background-size:26px 26px}
   .dark .bg-grid{background-image:radial-gradient(rgba(148,163,184,.06) 1px,transparent 1px)}
   .wv{position:absolute;left:0;top:0;height:100%;width:200%}
@@ -53,6 +40,17 @@
   button:not(:disabled):active{transform:scale(.97)}
   input:focus-visible,textarea:focus-visible{box-shadow:0 0 0 3px rgba(245,158,11,.15)}
   .drop-hot{border-color:#f59e0b!important;background-color:rgba(245,158,11,.07)!important}
+  /* Retrieval stepper — makes the pipeline stages the server already streams legible while
+     the answer is being composed, instead of flashing past in a single overwritten line. */
+  @keyframes rgspin{to{transform:rotate(360deg)}}
+  .rgspin{animation:rgspin .8s linear infinite}
+  .rgstep{display:flex;align-items:center;gap:.5rem;padding:.15rem 0;font-size:.72rem;line-height:1.3}
+  .rgstep[data-state="pending"]{opacity:.45}
+  .rgstep[data-state="done"] .rglabel{color:#64718a}
+  .dark .rgstep[data-state="done"] .rglabel{color:#93a0b5}
+  .rgstep[data-state="active"] .rglabel{color:#b45309;font-weight:500}
+  .dark .rgstep[data-state="active"] .rglabel{color:#fbbf24}
+  @media (prefers-reduced-motion:reduce){.rgspin{animation:none}}
   @media (prefers-reduced-motion:reduce){.wv-f,.wv-b{animation:none}.card-enter>*,.mscale,.view-enter{animation:none}.lift:hover{transform:none}.glow::before{display:none}.skel{animation:none}.thsh{animation:none;-webkit-text-fill-color:#71717a;color:#71717a}}
 </style>
 </head>
@@ -82,20 +80,8 @@
       <div id="wsMenu" class="absolute left-0 right-0 top-11 z-30 hidden rounded-xl border border-zinc-300 bg-white p-1.5 shadow-xl dark:border-zinc-800 dark:bg-[#1a2233]"></div>
     </div>
     <nav class="flex flex-col gap-1" id="nav">
-      <button data-view="triage" title="Triage" class="nav flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></svg><span class="hidden md:inline">Triage</span></button>
-      <!-- Hidden tabs 
-      <button data-view="systems" title="Systems" class="nav flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="hidden md:inline">Systems</span></button>
-      <button data-view="upload" title="Upload" class="nav flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg><span class="hidden md:inline">Upload</span></button>
-      <button data-view="graph" title="Graph" class="nav flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="m7 7.5 3.5 8.5M17 7.5 13.5 16M7.2 6.4h9.6"/></svg><span class="hidden md:inline">Graph</span></button>
-      <button data-view="curation" title="Curation" class="nav flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.5 11 7l3.5 1.5L11 10l-1.5 3.5L8 10 4.5 8.5 8 7z"/><path d="m18 13 .7 1.9 1.9.7-1.9.7L18 19l-.7-1.9-1.9-.7 1.9-.7z"/></svg><span class="hidden md:inline">Curation</span></button>
-      <button data-view="timeline" title="Timeline" class="nav flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="hidden md:inline">Timeline</span></button>
-      -->
+      <button data-view="triage" title="Ask" class="nav flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></svg><span class="hidden md:inline">Ask</span></button>
     </nav>
     <div id="chatsPane" class="mt-5 hidden min-h-0 flex-1 flex-col md:flex">
       <div class="mb-1.5 flex items-center justify-between px-2.5">
@@ -150,113 +136,10 @@
         </div>
       </section>
 
-      <section data-view="systems" class="hidden min-h-0 flex-1 overflow-y-auto py-8">
-        <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div><h2 class="serif text-2xl tracking-tight">Systems</h2>
-          <p class="mt-1 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">Everything in the knowledge base. Decommission one and it's hard-deleted from the graph + vectors.</p></div>
-          <button id="addSysBtn" class="shrink-0 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"><span class="mr-1 text-amber-500">+</span>Add system</button>
-        </div>
-        <div id="sysgrid" class="mt-5 grid grid-cols-1 gap-2.5 lg:grid-cols-2"></div>
-      </section>
 
-      <section data-view="upload" class="hidden min-h-0 flex-1 overflow-y-auto py-8">
-        <div><h2 class="serif text-2xl tracking-tight">Upload</h2>
-        <p class="mt-1 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">Feed your own runbooks, post-mortems or notes. They're parsed into the knowledge graph.</p>
-        <p class="mt-2 max-w-2xl text-xs text-zinc-400 dark:text-zinc-500">Ingestion runs a real <span class="mono">cognify</span> pass — about a minute, and it uses your LLM key. The default <span class="font-medium">Incidents</span> workspace is read-only to protect the demo data; create a workspace to ingest into.</p>
-        <p id="demoEphemeral" class="hidden mt-1.5 max-w-2xl text-xs text-amber-600/90 dark:text-amber-400/80">Hosted demo: anything you ingest lives only until the instance restarts — nothing is kept. Self-host for persistent memory.</p></div>
-        <label id="drop" class="mt-5 block cursor-pointer rounded-xl border border-dashed border-zinc-300 bg-white p-10 text-center transition hover:border-zinc-400 dark:border-zinc-700 dark:bg-[#141b2b] dark:hover:border-zinc-600">
-          <input id="file" type="file" accept=".txt,.md,.markdown,.json,.csv,.log" multiple class="hidden">
-          <svg class="mx-auto mb-2 text-zinc-400" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
-          <div class="text-sm font-medium">Drop a file or click to browse</div>
-          <div class="mt-1 text-xs text-zinc-400">.txt, .md, .json, .csv, .log</div>
-        </label>
-        <div class="my-3 text-center text-xs text-zinc-400">or paste text</div>
-        <textarea id="paste" rows="4" placeholder="Paste a runbook or note…" class="inp w-full resize-y"></textarea>
-        <div class="mt-2 flex gap-2">
-          <input id="upsys" placeholder="System name (e.g. redis-cache)" class="inp flex-1">
-          <button id="bUp" disabled class="btn-primary">Ingest</button>
-        </div>
-        <div id="upmsg" class="mt-3 text-sm"></div>
-      </section>
 
-      <section data-view="graph" class="hidden flex min-h-0 flex-1 flex-col overflow-y-auto py-8">
-        <div class="flex items-end justify-between">
-          <div><h2 class="serif text-2xl tracking-tight">Knowledge graph</h2>
-          <p class="mt-1 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">The live graph Cognee built from your docs. Click a node to see what it connects to; decommission a system, then refresh — watch its node vanish.</p></div>
-          <div class="flex items-center gap-2">
-            <input id="gsearch" placeholder="find a node…" aria-label="Search the graph" class="mono w-36 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm outline-none placeholder:text-zinc-400 focus:border-amber-500 dark:border-zinc-800 dark:bg-[#141b2b] dark:placeholder:text-zinc-500 sm:w-52">
-            <button id="greload" class="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm transition hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Refresh</button>
-          </div>
-        </div>
-        <div class="relative mt-5 min-h-[300px] flex-1">
-          <div id="graphbox" class="absolute inset-0 rounded-xl border border-zinc-300 bg-white dark:border-zinc-800 dark:bg-[#141b2b]"></div>
-          <div id="gskel" class="hidden absolute inset-0 rounded-xl skel"></div>
-          <div id="gpanel" data-glow class="glow hidden absolute right-3 top-3 z-10 w-72 max-h-[calc(100%-1.5rem)] overflow-y-auto rounded-xl border border-zinc-300 bg-white/95 p-4 shadow-xl backdrop-blur dark:border-zinc-700 dark:bg-[#0e1422]/95"></div>
-        </div>
-        <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-400">
-          <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-amber-400"></span>system / concept</span>
-          <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-yellow-400"></span>type</span>
-          <span id="glegDem" class="hidden flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-amber-400"></span>demoted</span>
-          <span id="gmeta"></span>
-          <button id="gask" class="hidden rounded-md border border-amber-500/40 px-2 py-0.5 font-medium text-amber-600 transition hover:bg-amber-500/10 dark:text-amber-400"></button>
-        </div>
-      </section>
 
-      <section data-view="curation" class="hidden min-h-0 flex-1 overflow-y-auto py-8">
-        <div><h2 class="serif text-2xl tracking-tight">Curation</h2>
-        <p class="mt-1 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">Proactive memory hygiene — catch knowledge that has gone stale or contradicts itself, before it misleads you.</p></div>
-        <div id="memHealth" class="mt-5"></div>
-        <div data-glow class="glow mt-5 rounded-xl border border-amber-300/70 bg-amber-50/40 p-4 dark:border-amber-800/50 dark:bg-amber-950/15">
-          <div class="flex items-start justify-between gap-3">
-            <div><div class="flex items-center gap-2"><span class="mono text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">The decay loop</span></div>
-              <h3 class="mt-0.5 text-sm font-semibold">Run a curation cycle</h3>
-              <p class="mt-0.5 max-w-2xl text-xs text-zinc-500 dark:text-zinc-400">One bounded pass over every runbook by review-age. Aging knowledge is <span class="font-medium text-amber-600 dark:text-amber-400">auto-demoted</span> (reversible — it sinks in answers but stays restorable); the very stale are also <span class="font-medium text-red-600 dark:text-red-400">queued for your approval</span> before any permanent delete. <span class="font-medium text-amber-600 dark:text-amber-400">Preview is free · 0 tokens</span> · nothing changes until you apply.</p></div>
-            <button id="curCycRun" class="shrink-0 rounded-full bg-amber-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-amber-500">Run cycle</button>
-          </div>
-          <div id="curCycBody" class="mt-3"></div>
-        </div>
-        <div data-glow class="glow mt-3 rounded-xl border border-zinc-300 bg-white/60 p-4 dark:border-zinc-800 dark:bg-[#141b2b]/50">
-          <div class="flex items-start justify-between gap-3">
-            <div><h3 class="text-sm font-semibold">Stale references</h3><p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Remaining docs that still mention a decommissioned system. <span class="font-medium text-amber-600 dark:text-amber-400">Free · 0 tokens</span></p></div>
-            <button id="curRun" class="shrink-0 rounded-full bg-zinc-950 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200">Scan</button>
-          </div>
-          <div id="curBody" class="mt-3"></div>
-        </div>
-        <div data-glow class="glow mt-3 rounded-xl border border-zinc-300 bg-white/60 p-4 dark:border-zinc-800 dark:bg-[#141b2b]/50">
-          <div class="flex items-start justify-between gap-3">
-            <div><h3 class="text-sm font-semibold">Conflicting runbooks</h3><p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Docs that contradict each other on a fact. <span class="font-medium text-amber-600 dark:text-amber-400">Uses your model · capped at 8 checks</span></p></div>
-            <button id="curConfRun" class="shrink-0 rounded-full bg-zinc-950 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200">Scan</button>
-          </div>
-          <div id="curConfBody" class="mt-3"></div>
-        </div>
-        <div data-glow class="glow mt-3 rounded-xl border border-zinc-300 bg-white/60 p-4 dark:border-zinc-800 dark:bg-[#141b2b]/50">
-          <div class="flex items-start justify-between gap-3">
-            <div><h3 class="text-sm font-semibold">Aging knowledge</h3><p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Runbooks not reviewed in over 180 days — likely stale by age. <span class="font-medium text-amber-600 dark:text-amber-400">Free · 0 tokens</span></p></div>
-            <button id="curAgeRun" class="shrink-0 rounded-full bg-zinc-950 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200">Scan</button>
-          </div>
-          <div id="curAgeBody" class="mt-3"></div>
-        </div>
-        <div data-glow class="glow mt-3 rounded-xl border border-zinc-300 bg-white/60 p-4 dark:border-zinc-800 dark:bg-[#141b2b]/50">
-          <div class="flex items-start justify-between gap-3">
-            <div><h3 class="text-sm font-semibold">Retirement proposals</h3><p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Long-overdue runbooks that look retired — candidates to forget. <span class="font-medium text-amber-600 dark:text-amber-400">Free · 0 tokens</span> · <span class="text-zinc-500 dark:text-zinc-400">Proposals only — nothing is deleted until you confirm.</span></p></div>
-            <button id="curPropRun" class="shrink-0 rounded-full bg-zinc-950 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200">Scan</button>
-          </div>
-          <div id="curPropBody" class="mt-3"></div>
-        </div>
-      </section>
 
-      <section data-view="timeline" class="hidden min-h-0 flex-1 overflow-y-auto py-8">
-        <div><h2 class="serif text-2xl tracking-tight">Timeline</h2>
-        <p class="mt-1 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">A durable audit log of what this memory has learned and forgotten — and when. Every decommission lands here with its verifiable removal receipt. <span class="font-medium text-amber-600 dark:text-amber-400">Free · 0 tokens</span></p></div>
-        <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-          <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-zinc-400"></span>reviewed</span>
-          <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-amber-400"></span>demoted <span class="text-zinc-400">· reversible</span></span>
-          <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-amber-400"></span>restored / self-healed</span>
-          <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-red-500"></span>forgotten <span class="text-zinc-400">· with removal receipt</span></span>
-        </div>
-        <p class="mt-2 text-xs text-zinc-400 dark:text-zinc-500">Run a curation cycle or decommission a system and the coloured receipts land here.</p>
-        <div id="tlBody" class="mt-5"></div>
-      </section>
 
     </div>
   </main>
@@ -287,11 +170,6 @@
   </div>
 </div>
 
-<div id="fgModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-  <div class="mscale w-full max-w-md rounded-2xl border border-zinc-300 bg-white shadow-2xl dark:border-zinc-800 dark:bg-[#0e1422]">
-    <div id="fgBody" class="p-6"></div>
-  </div>
-</div>
 
 <div id="setModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
   <div class="mscale w-full max-w-md rounded-2xl border border-zinc-300 bg-white p-5 shadow-2xl dark:border-zinc-800 dark:bg-[#0e1422]">
@@ -328,19 +206,6 @@
   </div>
 </div>
 
-<div id="addModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-  <div class="mscale w-full max-w-md rounded-2xl border border-zinc-300 bg-white p-5 shadow-2xl dark:border-zinc-800 dark:bg-[#0e1422]">
-    <div class="flex items-center gap-2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-500"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg><h3 class="text-base font-semibold tracking-tight">Add a system</h3></div>
-    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Name it and paste its runbook, notes or post-mortem — Mimir builds it into the knowledge graph.</p>
-    <input id="addName" maxlength="60" placeholder="System name (e.g. redis-cache)" class="mt-4 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm outline-none placeholder:text-zinc-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/25 dark:border-zinc-800 dark:bg-[#141b2b] dark:placeholder:text-zinc-500">
-    <textarea id="addText" rows="5" placeholder="Paste the runbook or notes…" class="mt-2 w-full resize-y rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm outline-none placeholder:text-zinc-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/25 dark:border-zinc-800 dark:bg-[#141b2b] dark:placeholder:text-zinc-500"></textarea>
-    <div id="addMsg" class="mt-2 min-h-[16px] text-xs"></div>
-    <div class="mt-4 flex justify-end gap-2">
-      <button id="addCancel" class="rounded-lg px-3.5 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900">Cancel</button>
-      <button id="addOk" class="rounded-full bg-zinc-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-zinc-200">Add system</button>
-    </div>
-  </div>
-</div>
 
 <div id="tokModal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
   <div class="mscale w-full max-w-sm rounded-2xl border border-zinc-300 bg-white p-5 shadow-2xl dark:border-zinc-800 dark:bg-[#0e1422]">
@@ -354,17 +219,6 @@
   </div>
 </div>
 
-<div id="rearmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-  <div class="mscale w-full max-w-md rounded-2xl border border-zinc-300 bg-white p-5 shadow-2xl dark:border-zinc-800 dark:bg-[#0e1422]">
-    <div class="flex items-center gap-2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-500"><path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.4 2.6L3 8"/><path d="M3 3v5h5"/></svg><h3 class="text-base font-semibold tracking-tight">Re-arm the demo</h3></div>
-    <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">This re-ingests the 2 <span class="mono">legacy-cache</span> runbooks into the knowledge base so you can run the forget demo again. It runs a real cognify pass &mdash; about 30 seconds &mdash; and uses your LLM key. The original forget receipt on the Timeline stays &mdash; this is a re-ingest, not an undo.</p>
-    <div id="rearmMsg" class="mt-2 min-h-[16px] text-xs"></div>
-    <div class="mt-4 flex justify-end gap-2">
-      <button id="rearmCancel" class="rounded-lg px-3.5 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900">Cancel</button>
-      <button id="rearmGo" class="rounded-full bg-amber-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-amber-500">Re-ingest 2 runbooks</button>
-    </div>
-  </div>
-</div>
 
 <div id="srcPeek" class="fixed inset-0 z-50 hidden">
   <div id="srcPeekBg" class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
@@ -444,10 +298,6 @@
    const _sec=document.querySelector('section[data-view="'+v+'"]');  // gentle view-enter fade+rise (skip graph — never transform the vis-network canvas)
    if(_sec&&v!=='graph'){_sec.classList.remove('view-enter');void _sec.offsetWidth;_sec.classList.add('view-enter');}
    document.querySelectorAll('.nav').forEach(b=>{b.className='nav flex items-center justify-center md:justify-start gap-2.5 rounded-md px-2 md:px-2.5 py-2 text-sm '+(b.dataset.view===v?navActive:navIdle);});
-   if(v==='systems')loadSystems();
-   if(v==='graph')loadGraph();
-   if(v==='curation')loadCuration();
-   if(v==='timeline')loadTimeline();
  }
  document.querySelectorAll('.nav').forEach(b=>b.onclick=()=>show(b.dataset.view));
  show('triage');
@@ -459,8 +309,8 @@
    if(h.llm){$('llmbadge').textContent=h.llm.label+' · '+(h.llm.local?'local':'cloud');$('llmdot').className='h-1.5 w-1.5 shrink-0 rounded-full '+(h.llm.local?'bg-amber-500':'bg-amber-500');}
    {const al=$('authLock');if(al)al.classList.toggle('hidden',!h.auth);}
    {const sb=$('sovBadge');if(sb){sb.classList.toggle('hidden',!h.sovereign);sb.classList.toggle('flex',!!h.sovereign);}}
-   {const de=$('demoEphemeral');if(de)de.classList.toggle('hidden',!h.demo);window._isDemo=!!h.demo;}
-   if(h.ready){ready=true;setDot('ready · '+((h.systems&&h.systems.length)||0)+' systems','ok');$('bAsk').disabled=false;$('bUp').disabled=false;if(ctxSysCount==null)loadCtxCount();if(!poll._mem){poll._mem=1;loadMemHealth();}}
+   window._isDemo=!!h.demo;
+   if(h.ready){ready=true;setDot('ready · '+((h.systems&&h.systems.length)||0)+' systems','ok');$('bAsk').disabled=false;if(ctxSysCount==null)loadCtxCount();}
    else{setDot(h.status||'starting…','wait');setTimeout(poll,2000);}
  }catch(e){setTimeout(poll,2000);}}
  poll();
@@ -609,7 +459,19 @@
    const best=new Map();
    sources.forEach(s=>{const k=s.document||'Source';const prev=best.get(k);if(!prev||(s.score||0)>(prev.score||0))best.set(k,s);});
    const uniq=[...best.values()].sort((a,b)=>(b.score||0)-(a.score||0)),CAP=6;
-   const chip=s=>{const b=document.createElement('button');b.className='mono rounded-full border border-zinc-300 bg-zinc-100/60 px-3 py-1 text-[11px] text-zinc-500 transition hover:-translate-y-px hover:border-amber-500/50 hover:text-amber-600 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-400 dark:hover:text-amber-400';const title=s.document||'Source';let conf='';if(s.score!==undefined&&s.score!==null){if(s.score>=0.75)conf=' [CONF: HIGH]';else if(s.score>=0.45)conf=' [CONF: MEDIUM]';else conf=' [CONF: LOW]';}b.textContent=title+conf;b.title='View the source for '+title;b.onclick=()=>openSource(s);return b;};
+   // Confidence reads as a coloured dot and a percentage rather than a "[CONF: HIGH]" suffix:
+   // the officers using this are not reading debug output, and the document number is the part
+   // they actually recognise, so it gets the emphasis and the .pdf extension is dropped.
+   const chip=s=>{
+     const b=document.createElement('button');
+     b.className='flex items-center gap-2 rounded-xl border border-zinc-300 bg-white/70 px-3 py-1.5 text-left transition hover:-translate-y-px hover:border-amber-500/50 hover:shadow-sm dark:border-zinc-700 dark:bg-zinc-800/40';
+     const title=String(s.document||'Source').replace(/\.pdf$/i,'');
+     const sc=(s.score==null)?null:s.score;
+     const tone=sc==null?'bg-zinc-400':sc>=0.75?'bg-emerald-500':sc>=0.45?'bg-amber-500':'bg-zinc-400';
+     b.innerHTML='<span class="h-1.5 w-1.5 shrink-0 rounded-full '+tone+'"></span>'+
+       '<span class="min-w-0"><span class="block truncate text-[12px] font-medium text-zinc-700 dark:text-zinc-200">'+esc(title)+'</span>'+
+       (sc==null?'':'<span class="mono block text-[10px] text-zinc-400">'+Math.round(sc*100)+'% match</span>')+'</span>';
+     b.title='View the source for '+title;b.onclick=()=>openSource(s);return b;};
    uniq.slice(0,CAP).forEach(s=>bar.appendChild(chip(s)));
    if(uniq.length>CAP){const more=document.createElement('button');
      more.className='mono rounded-full border border-dashed border-zinc-300 px-3 py-1 text-[11px] text-zinc-400 transition hover:border-amber-500/50 hover:text-amber-600 dark:border-zinc-700 dark:text-zinc-500 dark:hover:text-amber-400';
@@ -706,22 +568,73 @@
  function closeSource(){const p=$('srcPeek');if(p)p.classList.add('hidden');}
  {const _bg=$('srcPeekBg');if(_bg)_bg.onclick=closeSource;}
  // M4: re-arm the demo — an honest re-INGEST of the hero runbooks (never framed as an undo).
- function openRearm(){const m=$('rearmModal');if(!m)return;const msg=$('rearmMsg');if(msg)msg.innerHTML='';const go=$('rearmGo');if(go)go.disabled=false;m.classList.remove('hidden');m.classList.add('flex');}
- function closeRearm(){const m=$('rearmModal');if(!m)return;m.classList.add('hidden');m.classList.remove('flex');}
- async function doRearm(){const go=$('rearmGo'),msg=$('rearmMsg');if(!go||!msg)return;go.disabled=true;
-   msg.innerHTML='<div class="text-zinc-500">re-ingesting <span class="mono">legacy-cache</span><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span> (a real cognify pass, ~30s)</div><div class="skel mt-2 h-1.5 w-full"></div>';
-   try{const up=await(await fetch('/demo/rearm',{method:'POST'})).json();
-     if(up.state==='error'||up.state==='busy'||up.error){go.disabled=false;msg.innerHTML='<span class="text-red-500">'+esc(up.error||'could not re-arm')+'</span>';return;}
-     const deadline=Date.now()+120000;
-     const t=setInterval(async()=>{
-       if(Date.now()>deadline){clearInterval(t);go.disabled=false;msg.innerHTML='<span class="text-red-500">taking longer than expected — check Systems in a moment.</span>';return;}
-       const st=await(await fetch('/ingest-status')).json();
-       if(st.state==='done'){clearInterval(t);invalidateGraphCache('default');closeRearm();if(curView==='systems')loadSystems();if(curView==='timeline')loadTimeline();}
-       else if(st.state==='error'){clearInterval(t);go.disabled=false;msg.innerHTML='<span class="text-red-500">re-ingest failed: '+esc(st.error||'')+'</span>';}
-     },2000);
-   }catch(e){go.disabled=false;msg.innerHTML='<span class="text-red-500">re-arm failed</span>';}}
- (function(){const ca=$('rearmCancel'),go=$('rearmGo'),m=$('rearmModal');if(ca)ca.onclick=closeRearm;if(go)go.onclick=doRearm;if(m)m.addEventListener('click',e=>{if(e.target===m)closeRearm();});})();
  const THINKING='<span class="thsh">thinking...</span>';
+
+ // ── retrieval stepper ────────────────────────────────────────────────────────
+ // /ask-stream already emits a status line per pipeline stage, but the old UI wrote each one
+ // over the last and the first answer token erased them all — the retrieval work was over
+ // before anyone could read that it happened. This accumulates the stages into a checklist
+ // while the answer is composed, then folds it away behind a summary line.
+ //
+ // Labels are matched on the server's wording rather than hard-coded by position, so a new or
+ // reordered stage still shows up (as its raw text) instead of silently disappearing.
+ const STEP_LABELS=[
+   [/intent|analyz/i,        'Understanding the question'],
+   [/search|retriev/i,       'Searching the corpus'],
+   [/translat/i,             'Translating the source text'],
+   [/rerank/i,               'Ranking the best passages'],
+   [/synthes|generat|answer/i,'Writing the answer']];
+ const stepLabel=s=>{
+   const raw=String(s||'').replace(/\.{3}$/,'').trim();
+   const hit=STEP_LABELS.find(([re])=>re.test(raw));
+   return hit?hit[1]:(raw.charAt(0).toUpperCase()+raw.slice(1));
+ };
+ const TICK='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+ const SPIN='<svg class="rgspin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.6" opacity=".9"/></svg>';
+
+ function pipelineSteps(c){
+   const box=c.parentElement;
+   const wrap=document.createElement('div');
+   wrap.className='mb-2 rounded-xl border border-zinc-200 bg-zinc-50/70 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/40';
+   const list=document.createElement('div');
+   const head=document.createElement('button');
+   head.type='button';
+   head.className='hidden w-full items-center gap-1.5 text-left text-[11px] text-zinc-400 transition hover:text-amber-600 dark:hover:text-amber-400';
+   wrap.appendChild(head);wrap.appendChild(list);
+   box.insertBefore(wrap,c);
+   const seen=[];
+   function paint(){
+     list.innerHTML=seen.map((s,i)=>{
+       const state=i===seen.length-1&&!s.done?'active':'done';
+       return '<div class="rgstep" data-state="'+state+'">'+
+         '<span class="shrink-0 '+(state==='done'?'text-emerald-500':'text-amber-500')+'">'+(state==='done'?TICK:SPIN)+'</span>'+
+         '<span class="rglabel truncate">'+esc(s.label)+'</span></div>';
+     }).join('');
+   }
+   return {
+     push(status){
+       const label=stepLabel(status);
+       if(seen.length&&seen[seen.length-1].label===label)return;   // server may repeat a stage
+       seen.forEach(s=>s.done=true);
+       seen.push({label,done:false});
+       paint();
+     },
+     // Called once the first answer token lands: every stage that ran is finished by definition.
+     finish(){seen.forEach(s=>s.done=true);paint();},
+     collapse(nSources){
+       if(!seen.length){wrap.remove();return;}
+       this.finish();
+       list.classList.add('hidden');
+       head.classList.remove('hidden');head.classList.add('flex');
+       const n=nSources||0;
+       head.innerHTML='<span>How this was answered'+(n?' · '+n+' source'+(n===1?'':'s'):'')+'</span>'+
+         '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+       head.onclick=()=>list.classList.toggle('hidden');
+     },
+     remove(){wrap.remove();}
+   };
+ }
+
  async function ask(q){q=(q||$('q').value).trim();if(!q||!ready)return;
    const t=ensureThread(q);const hist=t.msgs.slice(-6);
    t.msgs.push({role:'user',content:q});saveThreads();renderBar();
@@ -734,6 +647,7 @@
  // duplicated turns). Reused by ask() and by the Retry button.
  async function answerInto(q,hist,c,t){
    c.innerHTML=THINKING;$('bAsk').disabled=true;
+   const steps=pipelineSteps(c);
    // Stream the answer token-by-token via /ask-stream (NDJSON). The 60s timeout guards only the FIRST
    // token (connection/model-busy); once tokens flow it's cleared so a long answer is never cut off.
    const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),60000);
@@ -752,17 +666,20 @@
        while((nl=buf.indexOf('\n'))>=0){
          const line=buf.slice(0,nl).trim();buf=buf.slice(nl+1);if(!line)continue;
          let d;try{d=JSON.parse(line);}catch(_){continue;}
-         if(d.status&&first){c.innerHTML='<span class="thsh">'+esc(d.status)+'</span>';$('log').scrollTop=$('log').scrollHeight;}
-         if(d.t!=null){if(first){c.innerHTML='';first=false;clearTimeout(to);}answer+=d.t;c.innerHTML=fmt(answer);$('log').scrollTop=$('log').scrollHeight;}
+         if(d.status&&first){steps.push(d.status);c.innerHTML='';$('log').scrollTop=$('log').scrollHeight;}
+         if(d.t!=null){if(first){steps.finish();c.innerHTML='';first=false;clearTimeout(to);}answer+=d.t;c.innerHTML=fmt(answer);$('log').scrollTop=$('log').scrollHeight;}
          if(d.error)errored=d.error;
          if(d.done){cites=d.citations||[];recs=d.recommendations||[];mets=d.metrics||null;}
        }
      }
      clearTimeout(to);
      if(errored)throw new Error(errored);
-     answer=answer.trim();c.innerHTML=fmt(answer);addActions(c,q,answer,mets,cites);if(mets)addTiming(c,mets);if(cites&&cites.length)addSources(c,cites);if(recs&&recs.length)addRecommendations(c,recs);
+     answer=answer.trim();c.innerHTML=fmt(answer);
+     steps.collapse([...new Set((cites||[]).map(s=>s.document).filter(Boolean))].length);
+     addActions(c,q,answer,mets,cites);if(mets)addTiming(c,mets);if(cites&&cites.length)addSources(c,cites);if(recs&&recs.length)addRecommendations(c,recs);
      t.msgs.push({role:'assistant',content:answer,sources:cites,recs:recs,metrics:mets});saveThreads();
    }catch(e){
+     steps.remove();
      const slow=e&&e.name==='AbortError';
      const msg = slow ? 'That took too long — the model may be busy or rate-limited.' : (e.message || 'Could not reach the model right now.');
      c.innerHTML='<span class="text-red-500">'+msg+'</span> <button class="ml-1.5 rounded-md border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900">Retry</button>';
@@ -864,11 +781,11 @@
      closeWsDel();
      wsList=wsList.filter(w=>w.id!==id);
      if(activeWs===id){activeWs='default';localStorage.setItem('mimir.ws','default');ctxSysCount=null;loadThreads();renderBar();renderLog();loadCtxCount();}
-     renderWsName();renderWsMenu();if(curView==='systems')loadSystems();if(curView==='graph')loadGraph();
+     renderWsName();renderWsMenu();
    }catch(e){if(msg)msg.innerHTML='<span class="text-red-500">Request failed — is the server running?</span>';$('wsDelOk').disabled=false;}
  }
  (function(){const ok=$('wsDelOk'),ca=$('wsDelCancel'),m=$('wsDelModal');if(ok)ok.onclick=doDelWs;if(ca)ca.onclick=closeWsDel;if(m)m.addEventListener('click',e=>{if(e.target===m)closeWsDel();});})();
- function switchWs(id){activeWs=id;localStorage.setItem('mimir.ws',id);invalidateGraphCache();$('wsMenu').classList.add('hidden');ctxSysCount=null;renderWsName();loadCtxCount();loadThreads();renderBar();renderLog();demoCardUpd();if(curView==='systems')loadSystems();if(curView==='graph')loadGraph();if(curView==='timeline')loadTimeline();}
+ function switchWs(id){activeWs=id;localStorage.setItem('mimir.ws',id);invalidateGraphCache();$('wsMenu').classList.add('hidden');ctxSysCount=null;renderWsName();loadCtxCount();loadThreads();renderBar();renderLog();demoCardUpd();}
  function createWs(){$('wsMenu').classList.add('hidden');$('wsModalInput').value='';const cm=$('wsModalMsg');if(cm)cm.textContent='';$('wsModalOk').disabled=false;const m=$('wsModal');m.classList.remove('hidden');m.classList.add('flex');setTimeout(()=>$('wsModalInput').focus(),40);}
  function closeWsModal(){const m=$('wsModal');m.classList.add('hidden');m.classList.remove('flex');}
  async function doCreateWs(){const name=($('wsModalInput').value||'').trim();if(!name)return;const msg=$('wsModalMsg');if(msg)msg.textContent='';$('wsModalOk').disabled=true;
@@ -883,311 +800,17 @@
  // Esc closes whichever modal / graph panel is open (backdrop-click already works everywhere).
  document.addEventListener('keydown',function(e){
    if(e.key!=='Escape')return;
-   const ids=['tokCancel','srcPeekX','rearmCancel','fgDone','fgCancel','fgX','setCancel','addCancel','wsDelCancel','wsModalCancel','gpclose'];
+   const ids=['tokCancel','srcPeekX','setCancel','wsDelCancel','wsModalCancel'];
    for(let i=0;i<ids.length;i++){const el=$(ids[i]);if(el&&el.offsetParent!==null){el.click();return;}}
  });
  $('wsBtn').onclick=e=>{e.stopPropagation();const m=$('wsMenu');if(m.classList.contains('hidden')){renderWsMenu();m.classList.remove('hidden');}else{m.classList.add('hidden');}};
  document.addEventListener('click',e=>{const m=$('wsMenu');if(m&&!m.classList.contains('hidden')&&!m.contains(e.target)&&!e.target.closest('#wsBtn'))m.classList.add('hidden');});
  loadWs();
 
- async function loadSystems(){
-   const g=$('sysgrid');g.classList.remove('card-enter');g.innerHTML=Array(4).fill('<div class="rounded-xl border border-zinc-200 bg-white/50 px-4 py-3 dark:border-zinc-800 dark:bg-[#141b2b]/50"><div class="skel h-4 w-24"></div><div class="skel mt-2.5 h-3 w-40"></div><div class="mt-3.5 flex justify-end"><div class="skel h-7 w-28"></div></div></div>').join('');
-   try{const j=await(await fetch('/systems?workspace='+encodeURIComponent(activeWs))).json();
-     ctxSysCount=(j.systems&&j.systems.length)||0;renderCtx();
-     if(!j.systems.length){g.innerHTML='<div class="col-span-full rounded-xl border border-dashed border-zinc-300 bg-white/50 p-8 text-center dark:border-zinc-700 dark:bg-[#141b2b]/50"><p class="text-sm text-zinc-500 dark:text-zinc-400">No systems in this workspace yet.</p><button id="emptyAdd" class="mt-3 rounded-full bg-amber-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-amber-500">Add a system</button></div>';const ea=$('emptyAdd');if(ea)ea.onclick=()=>{const b=$('addSysBtn');if(b)b.click();};return;}
-     g.innerHTML='';g.classList.add('card-enter');
-     // M4: after the hero forget, the golden Systems view offers an in-app re-arm (re-ingest, not undo).
-     if(activeWs==='incidents'&&!j.systems.some(s=>s.name==='legacy-cache')){
-       const rc=document.createElement('div');
-       rc.className='col-span-full rounded-xl border border-amber-300/60 bg-amber-50/40 p-4 dark:border-amber-800/40 dark:bg-amber-950/15';
-       rc.innerHTML='<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div class="text-sm font-medium text-zinc-800 dark:text-zinc-100">Demo was run &mdash; <span class="mono">legacy-cache</span> was verifiably forgotten.</div><p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Re-ingest its 2 runbooks to run the forget demo again. ~30s &middot; uses your LLM key &middot; the Timeline receipt stays.</p></div><button id="rearmBtn" class="shrink-0 rounded-full border border-amber-500/50 bg-white/70 px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50 dark:bg-transparent dark:text-amber-300 dark:hover:bg-amber-950/30">Re-arm the demo</button></div>';
-       g.appendChild(rc);const rb=rc.querySelector('#rearmBtn');if(rb)rb.onclick=openRearm;
-     }
-     const staleDays=j.stale_days||180;
-     j.systems.forEach((s,idx)=>{
-       const card=document.createElement('div');
-       card.className='glow lift flex flex-col gap-3 rounded-xl border border-zinc-300 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-[#141b2b]';
-       card.setAttribute('data-glow','');card.style.setProperty('--i',idx);
-       let meta=s.docs+' document'+(s.docs===1?'':'s');let badge='';const overdue=(s.age_days!=null&&s.age_days>staleDays);
-       if(s.age_days!=null){const ago=s.age_days>=365?(s.age_days/365).toFixed(1)+'y':s.age_days+'d';meta+=' · reviewed '+ago+' ago';if(overdue)badge=' <span class="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">overdue</span>';}
-       if(s.demoted)badge+=' <span class="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/70 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>demoted · reversible</span>';
-       const markBtn=overdue?'<button data-sys="'+esc(s.name)+'" class="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40">Mark reviewed</button>':'';
-       card.innerHTML='<div class="min-w-0"><div class="mono text-sm font-medium">'+esc(s.name)+'</div><div class="mt-0.5 text-xs text-zinc-400">'+meta+badge+'</div></div>'+
-         '<div class="flex flex-wrap items-center justify-end gap-2">'+markBtn+'<button class="decom shrink-0 rounded-full border border-red-300 bg-red-50/50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:-translate-y-px hover:border-red-400 hover:bg-red-50 dark:border-red-800/70 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-950/40">Decommission</button></div>';
-       card.querySelector('.decom').onclick=()=>forgetFlow(s.name,card);
-       const mb=card.querySelector('[data-sys]');if(mb)mb.onclick=()=>markReviewed(mb);
-       g.appendChild(card);
-     });
-   }catch(e){g.innerHTML='<div class="col-span-full rounded-xl border border-red-300/60 bg-red-50/40 p-4 text-sm text-red-600 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-400">Could not load systems. Check the server is running, then reopen this view.</div>';}
- }
-
- // Curation (memory hygiene) — proactively flag remaining docs that still reference a decommissioned
- // system. Step 1 is DETERMINISTIC: pure text matching, zero LLM calls (the strongest token guardrail).
- // Curation opens as a live dashboard: auto-run the two FREE (0-token, deterministic) scans on first open;
- // the conflict scan stays MANUAL because it spends model tokens (cost stays opt-in + transparent).
- // S1: Memory health — a deterministic, 0-token score (no gauge, no sidebar number). Computed client-side
- // from the same aging + stale-ref scans the curation view already runs. Formula: 100 - 3*overdue(cap30)
- // - 5*veryStale(cap20) - 8*staleRefs(cap24). Golden = 7 / 3 / 0 -> 64.
- function memScore(o,v,s){return Math.max(0,100-Math.min(3*o,30)-Math.min(5*v,20)-Math.min(8*s,24));}
- function tweenCount(el,to){if(!el)return;if(gReduced){el.textContent=to;return;}var t0=performance.now();
-   (function step(now){var k=Math.min(1,(now-t0)/700);el.textContent=Math.round(to*(1-Math.pow(1-k,3)));if(k<1)requestAnimationFrame(step);})(t0);
-   setTimeout(function(){el.textContent=to;},820);}  // guarantee the final value even if rAF is throttled (background tab)
- function curationDot(score){var nav=document.querySelector('[data-view="curation"]');if(!nav)return;nav.classList.add('relative');var dot=nav.querySelector('.curdot');
-   if(score<80&&!dot){dot=document.createElement('span');dot.className='curdot absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-amber-500';dot.title='Memory health below 80';nav.appendChild(dot);}
-   else if(score>=80&&dot){dot.remove();}}
- async function loadMemHealth(){var box=$('memHealth');var o=0,v=0,s=0;
-   try{var aj=await(await fetch('/curation/aging?workspace='+encodeURIComponent(activeWs)+'&days=180')).json();var ag=aj.aging||[];o=ag.length;v=ag.filter(function(x){return x.age_days>360;}).length;}catch(e){}
-   try{var cj=await(await fetch('/curation?workspace='+encodeURIComponent(activeWs))).json();s=(cj.findings||[]).length;}catch(e){}
-   var score=memScore(o,v,s);curationDot(score);if(!box)return;
-   var ageDed=Math.min(3*o,30)+Math.min(5*v,20),refDed=Math.min(8*s,24);
-   var why=o+' overdue · '+v+' very stale · '+s+' stale reference'+(s===1?'':'s');
-   box.innerHTML='<div class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5"><span class="serif text-2xl tracking-tight text-zinc-900 dark:text-zinc-100">Memory health <span id="memScore">0</span></span><span class="text-sm text-zinc-500 dark:text-zinc-400">'+why+'</span></div>'+
-     '<div class="mt-2 flex h-1 w-full max-w-md overflow-hidden rounded-full bg-zinc-200/60 dark:bg-zinc-800/60"><div style="width:'+score+'%" class="h-full bg-amber-500/80"></div><div style="width:'+ageDed+'%" class="h-full bg-amber-500/80"></div><div style="width:'+refDed+'%" class="h-full bg-red-500/80"></div></div>'+
-     '<div class="mono mt-1 text-[10px] uppercase tracking-wide text-zinc-400">deterministic · free · 0 tokens</div>';
-   tweenCount($('memScore'),score);}
- function loadCuration(){loadMemHealth();const cyc=$('curCycBody');if(cyc&&cyc.dataset.ran!=='1')cyc.innerHTML='<div class="text-sm text-zinc-400">Click <span class="font-medium text-zinc-500 dark:text-zinc-300">Run cycle</span> for a free preview of what would be demoted or queued — nothing changes until you apply.</div>';
-   const b=$('curBody');if(b&&b.dataset.ran!=='1')runCuration();
-   const cb=$('curConfBody');if(cb&&cb.dataset.ran!=='1')cb.innerHTML='<div class="text-sm text-zinc-400">Scan for contradictions between runbooks. <span class="text-amber-600 dark:text-amber-400">Uses your model</span> — click Scan when you want it.</div>';
-   const ab=$('curAgeBody');if(ab&&ab.dataset.ran!=='1')runAging();
-   const pb=$('curPropBody');if(pb&&pb.dataset.ran!=='1')runProposals();}
- // 2-row shimmer skeleton for curation scans (replaces the old "scanning..." text line)
- function curSkel(){return '<div class="space-y-2.5"><div class="skel h-16 w-full"></div><div class="skel h-16 w-full"></div></div>';}
- async function runAging(){const b=$('curAgeBody');if(!b)return;b.dataset.ran='1';b.innerHTML=curSkel();
-   try{const j=await(await fetch('/curation/aging?workspace='+encodeURIComponent(activeWs)+'&days=180')).json();
-     const a=j.aging||[];const meta=(j.scanned||0)+' runbooks · 0 tokens';
-     if(!a.length){b.innerHTML='<div class="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300"><span class="font-semibold">All fresh.</span> Every runbook was reviewed within '+(j.days||180)+' days. <span class="opacity-70">('+meta+')</span></div>';return;}
-     let h='<div class="mb-3 text-sm text-zinc-500 dark:text-zinc-400"><span class="font-medium text-amber-600 dark:text-amber-400">'+a.length+' overdue for review</span> · '+meta+'</div><div class="card-enter space-y-2.5">';
-     a.forEach((x,idx)=>{const ago=x.age_days>=365?(x.age_days/365).toFixed(1)+' years':Math.round(x.age_days/30)+' months';h+='<div style="--i:'+idx+'" class="rounded-xl border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-900/40 dark:bg-amber-950/15"><div class="flex items-start justify-between gap-3"><div><div class="flex flex-wrap items-center gap-1.5 text-sm"><span class="mono font-medium text-zinc-900 dark:text-zinc-100">'+esc(x.system)+'</span><span class="text-zinc-400">last reviewed</span><span class="mono font-medium text-amber-600 dark:text-amber-400">'+esc(x.reviewed)+'</span></div><p class="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">'+x.age_days+' days ago (~'+ago+') — verify it is still accurate.</p></div><button data-sys="'+esc(x.system)+'" class="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40">Mark reviewed</button></div></div>';});
-     h+='</div>';b.innerHTML=h;
-     b.querySelectorAll('button[data-sys]').forEach(btn=>btn.onclick=()=>markReviewed(btn));
-   }catch(e){b.innerHTML='<div class="text-sm text-red-500">scan failed</div>';}
- }
- // Aging detection→action: mark a runbook reviewed-today → it leaves the overdue list + lands on the Timeline.
- async function markReviewed(btn){const sys=btn.dataset.sys;btn.disabled=true;btn.classList.add('opacity-50','pointer-events-none');
-   try{const r=await(await fetch('/curation/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:sys,workspace:activeWs})})).json();
-     if(r&&r.ok){loadMemHealth();if(curView==='systems')loadSystems();if($('curAgeBody')&&$('curAgeBody').dataset.ran==='1')runAging();if($('curPropBody')&&$('curPropBody').dataset.ran==='1')runProposals();if(curView==='timeline')loadTimeline();}else{btn.disabled=false;btn.classList.remove('opacity-50','pointer-events-none');}
-   }catch(e){btn.disabled=false;btn.classList.remove('opacity-50','pointer-events-none');}
- }
- (function(){const r=$('curAgeRun');if(r)r.onclick=runAging;})();
- // Retirement proposals (forget-as-policy) — DETERMINISTIC, read-only retirement CANDIDATES (long-overdue
- // runbooks). PROPOSALS ONLY: each row offers two HUMAN-GATED actions and nothing is deleted automatically.
- //  • "Forget…" reuses the EXISTING Proof-of-Forgetting modal (forgetFlow → /forget → receipt + certificate).
- //  • "Keep / mark reviewed" reuses the EXISTING mark-reviewed action so the human can dismiss a proposal.
- async function runProposals(){const b=$('curPropBody');if(!b)return;b.dataset.ran='1';b.innerHTML=curSkel();
-   try{const j=await(await fetch('/curation/proposals?workspace='+encodeURIComponent(activeWs)+'&days=365')).json();
-     const p=j.proposals||[];const meta=(j.scanned||0)+' runbooks · 0 tokens';
-     if(!p.length){b.innerHTML='<div class="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300"><span class="font-semibold">Nothing to retire.</span> No runbook is overdue past '+(j.days||365)+' days. <span class="opacity-70">('+meta+')</span></div>';return;}
-     let h='<div class="mb-2 text-sm text-zinc-500 dark:text-zinc-400"><span class="font-medium text-amber-600 dark:text-amber-400">'+p.length+' retirement candidate'+(p.length===1?'':'s')+'</span> · '+meta+'</div>'+
-       '<p class="mb-3 text-xs text-zinc-400">Proposals only — nothing is deleted until you confirm.</p><div class="card-enter space-y-2.5">';
-     p.forEach((x,idx)=>{const ago=x.age_days>=365?(x.age_days/365).toFixed(1)+' years':Math.round(x.age_days/30)+' months';
-       h+='<div style="--i:'+idx+'" class="rounded-xl border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-900/40 dark:bg-amber-950/15"><div class="flex items-start justify-between gap-3"><div class="min-w-0">'+
-         '<div class="flex flex-wrap items-center gap-1.5 text-sm"><span class="mono font-medium text-zinc-900 dark:text-zinc-100">'+esc(x.system)+'</span><span class="text-zinc-400">last reviewed</span><span class="mono font-medium text-amber-600 dark:text-amber-400">'+esc(x.last_reviewed)+'</span></div>'+
-         '<p class="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">'+x.age_days+' days ago (~'+ago+') — looks retired. '+esc((x.reasons||[])[0]||'')+'</p></div>'+
-         '<div class="flex shrink-0 items-center gap-2">'+
-         '<button data-prop-forget="'+esc(x.system)+'" class="rounded-full border border-red-300 bg-red-50/50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 dark:border-red-800/70 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-950/40">Forget…</button>'+
-         '<button data-prop-keep="'+esc(x.system)+'" class="rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40">Keep / mark reviewed</button>'+
-         '</div></div></div>';});
-     h+='</div>';b.innerHTML=h;
-     b.querySelectorAll('button[data-prop-forget]').forEach(btn=>btn.onclick=()=>forgetFlow(btn.getAttribute('data-prop-forget'),null));
-     b.querySelectorAll('button[data-prop-keep]').forEach(btn=>{btn.dataset.sys=btn.getAttribute('data-prop-keep');btn.onclick=()=>markReviewed(btn);});
-   }catch(e){b.innerHTML='<div class="text-sm text-red-500">scan failed</div>';}
- }
- (function(){const r=$('curPropRun');if(r)r.onclick=runProposals;})();
- // The curation/decay CYCLE — the headline loop. "Run cycle" = a dry-run PREVIEW (free · 0 tokens · no
- // mutation): what WOULD be auto-demoted (reversible) + what is queued for human approval (hard-delete).
- // "Apply" performs ONLY the reversible demotes; permanent deletes always wait for a human via forgetFlow.
- function cycTierBadge(w){return (w!=null&&w<=0.05)
-   ?'<span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700 dark:bg-red-950/40 dark:text-red-300">Deep</span>'
-   :'<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">Mild</span>';}
- async function runCurationCycle(apply){
-   const b=$('curCycBody');if(!b)return;b.dataset.ran='1';
-   b.innerHTML='<div class="text-sm text-zinc-500">'+(apply?'applying demotes':'previewing the cycle')+'<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></div>';
-   try{
-     const j=await(await fetch('/curation/cycle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workspace:activeWs,dry_run:!apply})})).json();
-     if(j.error){b.innerHTML='<div class="text-sm text-red-500">'+esc(j.error)+'</div>';return;}
-     renderCycle(b,j,apply);
-     if(apply)invalidateGraphCache(activeWs);
-     if(apply&&curView==='timeline')loadTimeline();
-   }catch(e){b.innerHTML='<div class="text-sm text-red-500">cycle failed</div>';}
- }
- function renderCycle(b,j,applied){
-   const auto=j.auto_demoted||[],q=j.queued_for_approval||[],h=j.health||{};
-   if(!auto.length&&!q.length){b.innerHTML='<div class="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300"><span class="font-semibold">All current.</span> No runbook is overdue for review — nothing to demote.</div>';return;}
-   let html='<div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-500 dark:text-zinc-400">'+
-     '<span><span class="mono font-medium text-zinc-700 dark:text-zinc-200">'+(h.systems||0)+'</span> systems</span>'+
-     '<span class="text-zinc-300 dark:text-zinc-700">·</span><span><span class="mono font-medium text-amber-600 dark:text-amber-400">'+(h.overdue||0)+'</span> overdue</span>'+
-     '<span class="text-zinc-300 dark:text-zinc-700">·</span><span><span class="mono font-medium text-amber-600 dark:text-amber-400">'+auto.length+'</span> '+(applied?'demoted':'to demote')+'</span>'+
-     '<span class="text-zinc-300 dark:text-zinc-700">·</span><span><span class="mono font-medium text-red-600 dark:text-red-400">'+q.length+'</span> queued</span></div>';
-   if(auto.length){
-     html+='<div class="mb-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300">'+(applied?'Auto-demoted (reversible)':'Will auto-demote (reversible)')+'</div><div class="space-y-2">';
-     auto.forEach(x=>{html+='<div class="flex items-start justify-between gap-3 rounded-lg border border-zinc-200 bg-white/70 px-3 py-2 dark:border-zinc-800 dark:bg-[#0e1422]/50">'+
-       '<div class="min-w-0"><div class="flex flex-wrap items-center gap-1.5 text-sm">'+cycTierBadge(x.weight)+'<span class="mono font-medium text-zinc-900 dark:text-zinc-100">'+esc(x.system)+'</span>'+
-       (applied?'<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">Demoted ✓</span>':'')+'</div>'+
-       '<p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">'+esc(x.reason||('not reviewed in '+x.age_days+'d'))+(x.nodes!=null?' · <span class="mono">'+x.nodes+' nodes</span>':'')+'</p></div>'+
-       (applied?'<button data-restore="'+esc(x.system)+'" class="shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900">Restore</button>':'')+
-       '</div>';});
-     html+='</div>';
-   }
-   if(q.length){
-     html+='<div class="mb-1.5 mt-4 text-xs font-medium text-zinc-600 dark:text-zinc-300">Queued for your approval — permanent delete</div>'+
-       '<p class="mb-2 text-xs text-zinc-400">Already demoted, so they are no longer recommended. Nothing is deleted until you confirm.</p><div class="space-y-2">';
-     q.forEach(x=>{html+='<div class="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50/40 px-3 py-2 dark:border-red-900/40 dark:bg-red-950/15">'+
-       '<div class="min-w-0"><div class="flex flex-wrap items-center gap-1.5 text-sm"><span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700 dark:bg-red-950/40 dark:text-red-300">Queued</span><span class="mono font-medium text-zinc-900 dark:text-zinc-100">'+esc(x.system)+'</span></div>'+
-       '<p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">'+esc(x.reason||('very stale ('+x.age_days+'d)'))+'</p></div>'+
-       '<button data-cyc-forget="'+esc(x.system)+'" class="shrink-0 rounded-full border border-red-300 bg-red-50/50 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 dark:border-red-800/70 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-950/40">Forget…</button>'+
-       '</div>';});
-     html+='</div>';
-   }
-   if(!applied&&auto.length){
-     html+='<div class="mt-4 flex items-center justify-between gap-3"><span class="text-xs text-zinc-400">Preview — nothing has changed yet.</span>'+
-       '<button id="curCycApply" class="rounded-full bg-amber-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-amber-500">Apply '+auto.length+' demote'+(auto.length===1?'':'s')+'</button></div>';
-   } else if(applied){
-     html+='<div class="mt-4 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Demotes applied and recorded to the Timeline. Reversible — Restore any system above, or reset the demo to clear all.</div>';
-   }
-   b.innerHTML=html;
-   const ap=$('curCycApply');if(ap)ap.onclick=()=>runCurationCycle(true);
-   b.querySelectorAll('button[data-restore]').forEach(btn=>btn.onclick=()=>restoreSystem(btn));
-   b.querySelectorAll('button[data-cyc-forget]').forEach(btn=>btn.onclick=()=>forgetFlow(btn.getAttribute('data-cyc-forget'),null));
- }
- async function restoreSystem(btn){const sys=btn.getAttribute('data-restore');btn.disabled=true;btn.textContent='…';
-   try{const r=await(await fetch('/curation/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:sys,workspace:activeWs})})).json();
-     if(r&&r.ok){btn.outerHTML='<span class="shrink-0 text-xs font-medium text-amber-600 dark:text-amber-400">Restored ✓</span>';if(curView==='timeline')loadTimeline();}
-     else{btn.disabled=false;btn.textContent='Restore';}
-   }catch(e){btn.disabled=false;btn.textContent='Restore';}
- }
- (function(){const r=$('curCycRun');if(r)r.onclick=()=>runCurationCycle(false);})();
- async function runConflicts(){const b=$('curConfBody');if(!b)return;b.dataset.ran='1';b.innerHTML=curSkel();
-   try{const j=await(await fetch('/curation/conflicts?workspace='+encodeURIComponent(activeWs))).json();
-     const c=j.conflicts||[];const meta=(j.pairs_checked||0)+' pair'+(j.pairs_checked===1?'':'s')+' checked'+(j.capped?' (capped at 8)':'');
-     if(!c.length){b.innerHTML='<div class="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300"><span class="font-semibold">No contradictions.</span> Your runbooks agree with each other. <span class="opacity-70">('+meta+')</span></div>';return;}
-     let h='<div class="mb-3 text-sm text-zinc-500 dark:text-zinc-400"><span class="font-medium text-amber-600 dark:text-amber-400">'+c.length+' conflict'+(c.length===1?'':'s')+'</span> · '+meta+'</div><div class="card-enter space-y-2.5">';
-     c.forEach((x,idx)=>{h+='<div style="--i:'+idx+'" class="rounded-xl border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-900/40 dark:bg-amber-950/15"><div class="flex flex-wrap items-center gap-1.5 text-sm"><span class="mono font-medium text-zinc-900 dark:text-zinc-100">'+esc(x.a)+'</span><span class="text-zinc-400">contradicts</span><span class="mono font-medium text-zinc-900 dark:text-zinc-100">'+esc(x.b)+'</span></div><p class="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">'+esc(x.detail)+'</p></div>';});
-     h+='</div>';b.innerHTML=h;
-   }catch(e){b.innerHTML='<div class="text-sm text-red-500">scan failed</div>';}
- }
- (function(){const r=$('curConfRun');if(r)r.onclick=runConflicts;})();
- async function runCuration(){const b=$('curBody');b.dataset.ran='1';b.innerHTML=curSkel();
-   try{const j=await(await fetch('/curation?workspace='+encodeURIComponent(activeWs))).json();
-     const f=j.findings||[];const meta=(j.scanned||0)+' docs scanned · 0 tokens';
-     if(!f.length){b.innerHTML='<div class="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300"><span class="font-semibold">Clean.</span> No remaining runbook references a decommissioned system. <span class="opacity-70">('+meta+')</span></div>';return;}
-     const hl=(snip,dead)=>{const e=esc(snip);try{return e.replace(new RegExp('('+dead.replace(/[^A-Za-z0-9]/g,'\\$&')+')','ig'),'<span class="rounded bg-red-100 px-1 font-medium text-red-700 line-through decoration-red-400 dark:bg-red-950/50 dark:text-red-300">$1</span>');}catch(_){return e;}};
-     let h='<div class="mb-3 text-sm text-zinc-500 dark:text-zinc-400"><span class="font-medium text-amber-600 dark:text-amber-400">'+f.length+' stale reference'+(f.length===1?'':'s')+'</span> · '+meta+'</div><div class="card-enter space-y-2.5">';
-     f.forEach((x,idx)=>{h+='<div style="--i:'+idx+'" class="rounded-xl border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-900/40 dark:bg-amber-950/15"><div class="flex flex-wrap items-center gap-1.5 text-sm"><span class="mono font-medium text-zinc-900 dark:text-zinc-100">'+esc(x.system)+'</span><span class="text-zinc-400">still mentions</span><span class="mono font-medium text-red-600 dark:text-red-400">'+esc(x.stale_ref)+'</span></div><p class="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">…'+hl(x.snippet,x.stale_ref)+'…</p></div>';});
-     h+='</div>';b.innerHTML=h;
-   }catch(e){b.innerHTML='<div class="text-sm text-red-500">scan failed</div>';}
- }
- (function(){const r=$('curRun');if(r)r.onclick=runCuration;})();
-
- // Memory timeline — durable audit log of what this memory learned / forgot, and when (forgets carry the real receipt).
- const TL_META={
-   forgotten:{label:'Forgotten',dot:'bg-red-500',badge:'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'},
-   added:{label:'Added',dot:'bg-amber-500',badge:'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'},
-   reviewed:{label:'Reviewed',dot:'bg-zinc-400 dark:bg-zinc-500',badge:'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'},
-   demoted:{label:'Demoted',dot:'bg-amber-500',badge:'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'},
-   restored:{label:'Restored',dot:'bg-amber-500',badge:'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'},
-   _default:{label:'Event',dot:'bg-zinc-400',badge:'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'}
- };
- function fmtTs(ts){const p=String(ts||'').slice(0,10).split('-');if(p.length===3){const d=new Date(+p[0],+p[1]-1,+p[2]);if(!isNaN(d))return d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});}return esc(String(ts||''));}
- async function loadTimeline(){
-   const b=$('tlBody');if(!b)return;
-   b.innerHTML='<div class="ml-2 space-y-5 border-l border-zinc-200 dark:border-zinc-800">'+Array(3).fill('<div class="relative mb-5 ml-5"><span class="skel absolute -left-[1.65rem] top-1 h-3 w-3 rounded-full"></span><div class="skel h-3 w-40"></div><div class="skel mt-2 h-3 w-56"></div></div>').join('')+'</div>';
-   try{
-     const j=await(await fetch('/timeline?workspace='+encodeURIComponent(activeWs))).json();
-     const ev=j.events||[];
-     if(!ev.length){b.innerHTML='<div class="rounded-xl border border-zinc-300 bg-white/50 p-5 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-[#141b2b]/40 dark:text-zinc-400">No memory events yet for this workspace.</div>';return;}
-     let h='<ol class="card-enter relative ml-2 border-l border-zinc-200 dark:border-zinc-800">';
-     ev.forEach((e,idx)=>{
-       const m=TL_META[e.op]||TL_META._default, d=e.detail||{};
-       let body='';
-       if(e.op==='forgotten'){
-         const bits=[];
-         if(d.docs!=null)bits.push(d.docs+' doc'+(d.docs===1?'':'s'));
-         if(d.nodes_removed!=null)bits.push(d.nodes_removed+' nodes');
-         if(d.edges_removed!=null)bits.push(d.edges_removed+' edges');
-         body='<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Removed from the graph + vectors'+(bits.length?': <span class="mono text-red-600 dark:text-red-400">'+bits.join(' · ')+'</span>':'')+'.</p>';
-         if(d.proof_answer)body+='<p class="mt-1.5 rounded-md bg-zinc-100 px-2.5 py-1.5 text-xs italic text-zinc-600 dark:bg-zinc-900/60 dark:text-zinc-400">Re-query proof: “'+esc(String(d.proof_answer).slice(0,200))+'”</p>';
-         // Certificate of Erasure — verifiable, exportable record of this deletion (only for events that carry a stable id).
-         if(e.id)body+='<a href="/certificate/'+encodeURIComponent(activeWs)+'/'+encodeURIComponent(e.id)+'" target="_blank" rel="noopener" class="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-amber-600 transition hover:text-amber-500 dark:text-amber-400"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Certificate</a>';
-       } else if(e.op==='added'){
-         body='<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Ingested into memory and made searchable.</p>';
-       } else if(e.op==='reviewed'){
-         body='<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Runbook last verified accurate.</p>';
-       } else if(e.op==='demoted'){
-         const tier=(d.weight!=null&&d.weight<=0.05)?'deep':'mild';
-         body='<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Down-ranked ('+tier+') by the curation cycle — its advice stops being recommended'+(d.nodes!=null?': <span class="mono text-amber-600 dark:text-amber-400">'+d.nodes+' nodes</span>':'')+'. <span class="text-zinc-400">Reversible.</span></p>';
-       } else if(e.op==='restored'){
-         const heal=d.via==='self-heal';
-         body='<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">'+(heal?'Re-reviewed, so it self-healed — brought back to normal ranking':'Brought back to normal ranking')+(d.nodes!=null?': <span class="mono text-amber-600 dark:text-amber-400">'+d.nodes+' nodes</span>':'')+'.</p>';
-       }
-       h+='<li class="relative mb-5 ml-5" style="--i:'+idx+'"><span class="absolute -left-[1.65rem] top-1 h-3 w-3 rounded-full ring-4 ring-[#f6f8fc] dark:ring-[#0a0e1a] '+m.dot+'"></span>'
-         +'<div class="flex flex-wrap items-center gap-2"><span class="'+m.badge+' rounded-full px-2 py-0.5 text-[11px] font-medium">'+m.label+'</span><span class="mono text-sm font-medium text-zinc-900 dark:text-zinc-100">'+esc(e.system)+'</span><span class="text-xs text-zinc-400">'+fmtTs(e.ts)+'</span></div>'
-         +body+'</li>';
-     });
-     h+='</ol>';
-     b.innerHTML=h;
-   }catch(err){b.innerHTML='<div class="text-sm text-red-500">Could not load timeline.</div>';}
- }
-
- // Proof of Forgetting — premium decommission flow: confirm -> dissolve + verify -> receipt (the differentiator made visible)
- let fgCard=null,fgSys=null,fgDidForget=false;
- function fgOpen(){const m=$('fgModal');m.classList.remove('hidden');m.classList.add('flex');}
- function fgClose(){const m=$('fgModal');m.classList.add('hidden');m.classList.remove('flex');const refresh=fgDidForget;fgDidForget=false;fgCard=null;fgSys=null;if(refresh){if(curView==='systems')loadSystems();if(curView==='curation'&&$('curPropBody')&&$('curPropBody').dataset.ran==='1')runProposals();if(curView==='curation'&&$('curAgeBody')&&$('curAgeBody').dataset.ran==='1')runAging();}}
- function forgetFlow(sys,card){fgSys=sys;fgCard=card;fgDidForget=false;
-   $('fgBody').innerHTML=
-     '<div class="flex items-center gap-2.5"><span class="grid h-9 w-9 place-items-center rounded-full border border-red-300 bg-red-50 text-red-600 dark:border-red-800/70 dark:bg-red-950/30 dark:text-red-400"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></span><h3 class="text-base font-semibold tracking-tight">Decommission '+esc(sys)+'?</h3></div>'+
-     '<p class="mt-3 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">This is a <b class="font-medium text-zinc-700 dark:text-zinc-200">verifiable hard-delete</b> — every document, graph node and vector for <span class="mono">'+esc(sys)+'</span> is removed for good. Mimir proves it afterwards.</p>'+
-     '<div class="mt-5 flex justify-end gap-2"><button id="fgCancel" class="rounded-lg px-3.5 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900">Cancel</button>'+
-     '<button id="fgGo" class="rounded-full bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700">Decommission</button></div>';
-   $('fgCancel').onclick=fgClose;$('fgGo').onclick=fgRun;fgOpen();
- }
- async function fgRun(){
-   $('fgBody').innerHTML=
-     '<div class="py-7 text-center"><div class="mx-auto mb-4 h-7 w-7"><svg class="animate-spin text-amber-500" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.2-8.6" stroke-linecap="round"/></svg></div>'+
-     '<p class="text-sm font-medium">Forgetting <span class="mono">'+esc(fgSys)+'</span>…</p>'+
-     '<p class="mt-1 text-xs text-zinc-400">removing from the graph + vectors, then verifying</p></div>';
-   const ac=new AbortController();const to=setTimeout(()=>ac.abort(),75000);  // don't spin forever if the server stalls
-   try{const res=await fetch('/forget',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:fgSys,workspace:activeWs}),signal:ac.signal});
-     clearTimeout(to);if(!res.ok)throw new Error('bad status');const j=await res.json();fgDidForget=true;invalidateGraphCache(activeWs);
-     if(fgCard){fgCard.classList.add('dissolving');const c=fgCard;setTimeout(()=>{c&&c.remove();},760);}  // only dissolve AFTER the delete actually succeeds
-     const rec=j.receipt||{system:fgSys,docs:0};if(!rec.event_id&&j.event_id)rec.event_id=j.event_id;rec._ws=j.workspace||activeWs;fgReceipt(rec);
-   }catch(e){clearTimeout(to);const msg=e&&e.name==='AbortError'?'This is taking too long — the decommission may still be finishing. Refresh Systems in a moment to check.':'Could not complete the decommission.';$('fgBody').innerHTML='<div class="py-7 text-center"><p class="text-sm text-red-500">'+esc(msg)+'</p><button id="fgX" class="mt-4 rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-800">Close</button></div>';$('fgX').onclick=fgClose;}
- }
- function fgStat(n,label){return '<div class="flex-1 rounded-xl border border-zinc-300 bg-zinc-50/60 px-2 py-3 text-center dark:border-zinc-800 dark:bg-zinc-900/40"><div class="mono text-2xl font-medium tracking-tight">'+(n==null?'—':n)+'</div><div class="mt-0.5 text-[10px] uppercase tracking-wide text-zinc-400">'+label+'</div></div>';}
- function fgReceipt(r){
-   let stats=fgStat(r.docs,'documents');
-   if(r.nodes_removed!=null)stats+=fgStat(r.nodes_removed,'graph nodes');
-   if(r.edges_removed!=null)stats+=fgStat(r.edges_removed,'relationships');
-   const proof=r.proof_answer?
-     '<div class="mt-5"><div class="mb-2 mono text-[10px] uppercase tracking-wide text-zinc-400">Proof · re-queried just now</div>'+
-     '<div class="space-y-2 rounded-xl border border-zinc-300 bg-zinc-50/50 p-3 dark:border-zinc-800 dark:bg-zinc-900/30">'+
-     '<div class="flex justify-end"><div class="max-w-[85%] rounded-2xl rounded-br-md bg-zinc-950 px-3.5 py-2 text-sm text-white dark:bg-white dark:text-black">'+esc(r.proof_query)+'</div></div>'+
-     '<div class="flex justify-start"><div class="max-w-[90%] rounded-2xl rounded-bl-md border border-zinc-300 bg-white px-3.5 py-2 text-sm leading-relaxed dark:border-zinc-800 dark:bg-[#1a2233]">'+esc(r.proof_answer)+'</div></div></div></div>':'';
-   // C03 retrieval-layer proof: forgotten docs' own chunks are gone from the vector index, not just rephrased.
-   const retr=(r.retrieval_chunks_remaining!=null)?
-     '<div class="mt-4 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/[0.04] px-3 py-2"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-amber-500"><path d="M20 6 9 17l-5-5"/></svg><span class="text-xs text-zinc-600 dark:text-zinc-300">Retrieval-layer proof: <span class="mono font-medium">'+r.retrieval_chunks_remaining+'</span> of its chunks remain in the vector index'+(r.retrieval_chunks_remaining===0?' &mdash; gone from the index, not just rephrased':'')+'</span></div>':'';
-   // Certificate of Erasure — a verifiable, exportable record of this deletion (opens a standalone print-ready page).
-   const cert=r.event_id?'<button id="fgCert" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Download Certificate</button>':'';
-   // Re-ask the incident question in a fresh chat — the money shot: same question, now a different answer.
-   const reask='<button id="fgReask" class="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-amber-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-amber-500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.4 2.6L3 8"/><path d="M3 3v5h5"/></svg>Ask the same question again</button>';
-   $('fgBody').innerHTML=
-     '<div class="text-center"><div class="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full border border-amber-500/30 bg-amber-500/5 text-amber-500"><svg width="22" height="20" viewBox="0 0 26 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M2 12c2.2-4 4.4-4 6.6 0s4.4 4 6.6 0"/><path d="M15.2 12c2.2-4 4.4-4 6.6 0" opacity=".4"/></svg></div>'+
-     '<h3 class="serif text-3xl tracking-tight">Forgotten.</h3>'+
-     '<p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400"><span class="mono text-zinc-700 dark:text-zinc-200">'+esc(r.system)+'</span> is gone — across the graph and the vectors.</p></div>'+
-     '<div class="mt-5 flex gap-2">'+stats+'</div>'+proof+retr+reask+
-     '<div class="mt-4 flex items-center justify-between gap-2"><span class="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Verifiable hard-delete</span>'+
-     '<div class="flex items-center gap-2">'+cert+
-     '<button id="fgDone" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900">Done</button></div></div>';
-   $('fgDone').onclick=fgClose;
-   const rb=$('fgReask');if(rb)rb.onclick=()=>{fgClose();newChat();show('triage');ask('If auth-service latency is high, what should I check?');};
-   const cb=$('fgCert');if(cb)cb.onclick=()=>window.open('/certificate/'+encodeURIComponent(r._ws||activeWs)+'/'+encodeURIComponent(r.event_id),'_blank');
- }
- $('fgModal').addEventListener('click',e=>{if(e.target===$('fgModal'))fgClose();});
-
- // graph — Obsidian-style: degree-sized nodes, hover a node to highlight its neighbours and dim the rest,
- // organic force-directed layout, relationship labels that reveal only on focus (clean by default).
- let gnet=null,gdata=null,gpinned=null,gpdepth=1,gRaf=null,gGen=0;
- const gReduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches);
- function loadVis(cb){if(window.vis)return cb();const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/vis-network@9.1.9/standalone/umd/vis-network.min.js';s.onload=cb;s.onerror=()=>{$('gmeta').textContent='could not load the graph library';};document.head.appendChild(s);}
+ // Served from our own host rather than a CDN: on a filtered or offline network the connection
+ // map used to fail with nothing but an error string. Still loaded on demand — it is 676 KB and
+ // only the per-answer connection map needs it, which most answers never open.
+ function loadVis(cb){if(window.vis)return cb();const s=document.createElement('script');s.src='/assets/vendor/vis-network-9.1.9.min.js';s.onload=cb;s.onerror=()=>{console.warn('connection map unavailable: vis-network failed to load');};document.head.appendChild(s);}
  function gpal(){const dark=document.documentElement.classList.contains('dark');return dark?{
      ent:{background:'#f59e0b',border:'#0891b2'},typ:{background:'#818cf8',border:'#eab308'},dem:{background:'#f59e0b',border:'#d97706'},
      dimNode:{background:'rgba(100,116,139,.16)',border:'rgba(100,116,139,.22)'},
@@ -1201,243 +824,5 @@
    };}
  function gbase(n,p){return n._demoted?{background:p.dem.background,border:p.dem.border}:(n.type==='Entity'?{background:p.ent.background,border:p.ent.border}:{background:p.typ.background,border:p.typ.border});}
  // animate node opacities toward targets (~170ms easeOutCubic) — the smooth Obsidian focus-pull; snaps on reduced-motion.
- function gAnimate(nop){
-   if(gRaf){cancelAnimationFrame(gRaf);gRaf=null;}
-   const gen=++gGen,cl=v=>v<0?0:(v>1?1:v);
-   const ncur={};gdata.kn.forEach(n=>{const it=gdata.nodesDS.get(n.id);ncur[n.id]=cl((it&&typeof it.opacity==='number')?it.opacity:1);});
-   const apply=f=>gdata.nodesDS.update(gdata.kn.map(n=>{const t=nop[n.id]==null?1:nop[n.id];return {id:n.id,opacity:cl(ncur[n.id]+(t-ncur[n.id])*f)};}));
-   if(gReduced){apply(1);return;}
-   const dur=170,t0=performance.now();
-   function step(now){if(gen!==gGen)return;const k=Math.min(1,Math.max(0,(now-t0)/dur));apply(1-Math.pow(1-k,3));if(k<1)gRaf=requestAnimationFrame(step);else gRaf=null;}
-   gRaf=requestAnimationFrame(step);
- }
- function gReset(){if(!gnet||!gdata)return;const p=gpal();
-   gdata.nodesDS.update(gdata.kn.map(n=>({id:n.id,color:gbase(n,p),font:{color:p.font},shadow:{enabled:false}})));
-   gdata.edgesDS.update(gdata.ke.map(e=>({id:e._id,color:{color:p.edge,opacity:1},width:1.1,label:'',font:{color:p.efont}})));
-   const nop={};gdata.kn.forEach(n=>nop[n.id]=1);gAnimate(nop);
- }
- function gFocus(id){if(!gnet||!gdata)return;const p=gpal();
-   const nb=new Set([id]);gdata.ke.forEach(e=>{if(e.source===id)nb.add(e.target);if(e.target===id)nb.add(e.source);});
-   gdata.nodesDS.update(gdata.kn.map(n=>{
-     if(n.id===id)return{id:n.id,color:gbase(n,p),font:{color:p.font},shadow:{enabled:true,color:p.glow,size:30,x:0,y:0}};
-     if(nb.has(n.id))return{id:n.id,color:gbase(n,p),font:{color:p.font},shadow:{enabled:false}};
-     return{id:n.id,color:gbase(n,p),font:{color:p.fontDim},shadow:{enabled:false}};
-   }));
-   gdata.edgesDS.update(gdata.ke.map(e=>{const on=e.source===id||e.target===id;return on
-     ?{id:e._id,color:{color:p.edgeHi,opacity:1},width:2.4,label:e.label,font:{color:p.efont}}
-     :{id:e._id,color:{color:p.edgeDim,opacity:1},width:.7,label:'',font:{color:p.efont}};}));
-   const nop={};gdata.kn.forEach(n=>nop[n.id]=(n.id===id||nb.has(n.id))?1:.13);gAnimate(nop);
- }
- // blast radius — BFS hop distances, then highlight outward N hops (incident "what depends on this").
- function gHops(id,depth){const dist={};dist[id]=0;let fr=[id];
-   for(let d=1;d<=depth;d++){const nx=[];fr.forEach(u=>{gdata.ke.forEach(e=>{const v=e.source===u?e.target:(e.target===u?e.source:null);if(v!=null&&dist[v]===undefined){dist[v]=d;nx.push(v);}});});fr=nx;}
-   return dist;}
- function gFocusHops(id,depth){if(!gnet||!gdata)return;const p=gpal();gpdepth=depth;
-   const dist=gHops(id,depth),opAt=h=>h<=1?1:(h===2?.5:.32);
-   gdata.nodesDS.update(gdata.kn.map(n=>{const h=dist[n.id];
-     if(h===undefined)return{id:n.id,color:gbase(n,p),font:{color:p.fontDim},shadow:{enabled:false}};
-     return{id:n.id,color:gbase(n,p),font:{color:h<=1?p.font:p.fontDim},shadow:n.id===id?{enabled:true,color:p.glow,size:30,x:0,y:0}:{enabled:false}};}));
-   gdata.edgesDS.update(gdata.ke.map(e=>{const a=dist[e.source],b=dist[e.target],inset=a!==undefined&&b!==undefined,far=inset?Math.max(a,b):99;
-     return inset?{id:e._id,color:{color:p.edgeHi,opacity:1},width:Math.max(.8,2.4-far*0.55),label:far<=1?e.label:'',font:{color:p.efont}}
-       :{id:e._id,color:{color:p.edgeDim,opacity:1},width:.7,label:'',font:{color:p.efont}};}));
-   const nop={};gdata.kn.forEach(n=>{const h=dist[n.id];nop[n.id]=h===undefined?.10:opAt(h);});gAnimate(nop);}
- function gMeta(id){const el=$('gmeta');if(!gdata)return;
-   if(id==null){el.textContent=gdata.kn.length+' systems & concepts · '+gdata.ke.length+' relationships  ·  hover a node to trace its connections';return;}
-   const n=gdata.byId[id],deg=gdata.deg[id]||0;
-   el.innerHTML='<b class="text-zinc-600 dark:text-zinc-300">'+esc(n?n.label:'node')+'</b> · '+deg+' connection'+(deg===1?'':'s')+'  ·  click empty space to reset';
- }
- // Node detail panel — read a node's domain connections in plain text (the canvas edge labels are tiny).
- function gPanelHide(){const el=$('gpanel');if(el){el.classList.add('hidden');el.innerHTML='';}}
- function gPanelShow(id){const el=$('gpanel');if(!el||!gdata)return;const n=gdata.byId[id];if(!n){gPanelHide();return;}
-   const types=[],rels=[];
-   gdata.ke.forEach(e=>{
-     if(e.source===id){const o=gdata.byId[e.target];if(!o)return;
-       if(n.type==='Entity'&&o.type==='EntityType')types.push(o.label);else rels.push({dir:'→',rel:e.label,node:o.label});}
-     else if(e.target===id){const o=gdata.byId[e.source];if(!o)return;rels.push({dir:'←',rel:e.label,node:o.label});}
-   });
-   const isEnt=n.type==='Entity';
-   let h='<div class="flex items-start justify-between gap-2"><div class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">'+esc(n.label)+'</div><button id="gpclose" aria-label="Close" class="-mr-1 -mt-1 shrink-0 text-zinc-400 transition hover:text-zinc-600 dark:hover:text-zinc-200"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>';
-   if(isEnt&&types.length)h+='<div class="mt-1.5 flex flex-wrap gap-1">'+types.map(t=>'<span class="rounded-full bg-yellow-100 px-1.5 py-0.5 text-[10px] font-medium text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300">'+esc(t)+'</span>').join('')+'</div>';
-   else h+='<div class="mt-1 text-[11px] uppercase tracking-wide text-zinc-400">'+(isEnt?'entity':'type')+'</div>';
-   if(rels.length)h+='<div class="mt-3 text-[11px] uppercase tracking-wide text-zinc-400">connections</div><div class="mt-1.5 space-y-1.5">'+rels.map(r=>'<div class="flex items-baseline gap-1.5 text-xs"><span class="text-amber-500">'+r.dir+'</span><span class="text-zinc-500 dark:text-zinc-400">'+esc(r.rel)+'</span><span class="font-medium text-zinc-800 dark:text-zinc-200">'+esc(r.node)+'</span></div>').join('')+'</div>';
-   else h+='<div class="mt-3 text-xs text-zinc-400">No connections in the graph.</div>';
-   if(rels.length||types.length){h+='<div class="mt-3 text-[11px] uppercase tracking-wide text-zinc-400">blast radius</div>';
-     h+='<div class="mt-1.5 flex gap-1">'+[1,2,3].map(d=>'<button data-d="'+d+'" class="gpradb flex-1 rounded-md border px-2 py-1 text-[11px] font-medium transition '+(d===gpdepth?'border-amber-500/60 bg-amber-500/10 text-amber-600 dark:text-amber-300':'border-zinc-200 text-zinc-500 hover:border-amber-500/50 dark:border-zinc-700 dark:text-zinc-400')+'">'+d+(d>1?' hops':' hop')+'</button>').join('')+'</div>';}
-   h+='<button id="gpask" class="mt-3 w-full rounded-lg border border-amber-500/40 px-3 py-1.5 text-xs font-medium text-amber-600 transition hover:bg-amber-500/10 dark:text-amber-400">Ask about this →</button>';
-   el.innerHTML=h;el.classList.remove('hidden');el.classList.remove('mscale');void el.offsetWidth;el.classList.add('mscale');
-   $('gpclose').onclick=()=>{gPanelHide();gpinned=null;gpdepth=1;gReset();gMeta(null);};
-   $('gpask').onclick=()=>askAbout(n.label);
-   [...el.querySelectorAll('.gpradb')].forEach(b=>b.onclick=()=>{gFocusHops(id,+b.dataset.d);gPanelShow(id);});
- }
- function loadGraph(){loadVis(async()=>{
-   $('gmeta').textContent='loading…';gpinned=null;
-   {const gs=$('gskel');if(gs)gs.classList.add('hidden');}  // physics settles IN VIEW — the live wobble IS the show (CEO: never hide/freeze it)
-   try{const d=await(await fetch('/graph?workspace='+encodeURIComponent(activeWs))).json();
-     if(d.error){$('gmeta').textContent='error: '+d.error;return;}
-     const p=gpal();
-     const keep={Entity:1,EntityType:1};
-     const kn=d.nodes.filter(n=>keep[n.type]);
-     // M2d: tint demoted systems amber (client-side; fail-safe — reuses the demote state from /systems)
-     let demCount=0;
-     try{const sj=await(await fetch('/systems?workspace='+encodeURIComponent(activeWs))).json();
-       const gnorm=v=>String(v||'').toLowerCase().replace(/[\s_]+/g,'-');
-       const demSet=new Set((sj.systems||[]).filter(s=>s.demoted).map(s=>gnorm(s.name)));
-       if(demSet.size)kn.forEach(n=>{if(demSet.has(gnorm(n.label))){n._demoted=true;demCount++;}});
-     }catch(_){}
-     {const gl=$('glegDem');if(gl)gl.classList.toggle('hidden',demCount===0);}
-     const ids=new Set(kn.map(n=>n.id));
-     const ke=d.edges.filter(e=>ids.has(e.source)&&ids.has(e.target)).map((e,i)=>({source:e.source,target:e.target,label:e.label,_id:i}));
-     const deg={};ke.forEach(e=>{deg[e.source]=(deg[e.source]||0)+1;deg[e.target]=(deg[e.target]||0)+1;});
-     const byId={};kn.forEach(n=>byId[n.id]=n);
-     const nodesDS=new vis.DataSet(kn.map(n=>({id:n.id,label:n.label,shape:'dot',value:Math.sqrt(deg[n.id]||0)+1.5,color:gbase(n,p),
-       font:{color:p.font,strokeWidth:4,strokeColor:p.halo}})));
-     const edgesDS=new vis.DataSet(ke.map(e=>({id:e._id,from:e.source,to:e.target,label:'',color:{color:p.edge,opacity:1},width:1.1,font:{color:p.efont,strokeWidth:3,strokeColor:p.halo}})));
-     gdata={kn,ke,deg,byId,nodesDS,edgesDS};
-     const opts={
-       nodes:{borderWidth:2,scaling:{min:7,max:26,label:{enabled:true,min:12,max:22}}},
-       edges:{smooth:{type:'continuous',roundness:.4},arrows:{to:{enabled:true,scaleFactor:.4}},font:{size:11,align:'middle'},selectionWidth:0,hoverWidth:0},
-       physics:{solver:'forceAtlas2Based',forceAtlas2Based:{gravitationalConstant:-70,centralGravity:.012,springLength:130,springConstant:.07,damping:.45,avoidOverlap:.55},stabilization:{iterations:300,fit:true},minVelocity:.75},
-       interaction:{hover:true,hoverConnectedEdges:false,selectConnectedEdges:false,zoomView:true,dragView:true}};
-     gnet=new vis.Network($('graphbox'),{nodes:nodesDS,edges:edgesDS},opts);window.gnet=gnet;
-     const box=$('graphbox');
-     gnet.on('hoverNode',pr=>{if(gpinned==null)gFocus(pr.node);box.style.cursor='pointer';});
-     gnet.on('blurNode',()=>{if(gpinned==null)gReset();box.style.cursor='default';});
-     const gk=$('gask');
-     gnet.on('click',pr=>{if(pr.nodes&&pr.nodes.length){gpinned=pr.nodes[0];gpdepth=1;gFocusHops(gpinned,1);gMeta(gpinned);gPanelShow(gpinned);if(gk)gk.classList.add('hidden');gnet.focus(gpinned,{scale:gnet.getScale(),locked:false,animation:{duration:500,easingFunction:'easeInOutCubic'}});}else{gpinned=null;gpdepth=1;gReset();gMeta(null);gPanelHide();gnet.fit({animation:{duration:600,easingFunction:'easeInOutQuad'}});}});
-     gnet.on('doubleClick',pr=>{if(pr.nodes&&pr.nodes.length){const n=gdata.byId[pr.nodes[0]];if(n)askAbout(n.label);}});
-     gnet.once('stabilizationIterationsDone',()=>gnet.fit({animation:{duration:600,easingFunction:'easeInOutQuad'}}));
-     window.gFocus=gFocus;window.gReset=gReset;window.gFocusHops=gFocusHops;
-     gMeta(null);
-   }catch(e){$('gmeta').textContent='failed to load graph';}
- });}
- $('greload').onclick=loadGraph;
- // S2: search a node by label (hyphen/space-normalized), Enter → focus + halo; Esc/clear → reset.
- function gSearch(){if(!gnet||!gdata)return;var raw=($('gsearch').value||'').trim();
-   if(!raw){gpinned=null;gReset();gMeta(null);gPanelHide();return;}
-   var q=raw.toLowerCase().replace(/[\s_]+/g,'-'),norm=function(n){return String(n.label||'').toLowerCase().replace(/[\s_]+/g,'-');};
-   var hit=gdata.kn.find(function(n){return norm(n)===q;})||gdata.kn.find(function(n){return norm(n).indexOf(q)>=0;});
-   if(!hit){gMeta(null);return;}
-   gpinned=hit.id;gFocus(hit.id);gMeta(hit.id);gnet.focus(hit.id,{scale:1.15,animation:{duration:600,easingFunction:'easeInOutCubic'}});}
- (function(){var gi=$('gsearch');if(gi)gi.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();gSearch();}else if(e.key==='Escape'){gi.value='';gpinned=null;if(gnet&&gdata){gReset();gMeta(null);}}});})();
-
- // upload
- const drop=$('drop');let pending='';
- $('file').addEventListener('change',e=>readFiles(e.target.files));
- drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drop-hot');});
- drop.addEventListener('dragleave',()=>drop.classList.remove('drop-hot'));
- drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drop-hot');readFiles(e.dataTransfer.files);});
- function readFiles(files){if(!files||!files.length)return;const f=files[0];const rd=new FileReader();
-   rd.onload=()=>{pending=rd.result;if(!$('upsys').value)$('upsys').value=f.name.replace(/\.[^.]+$/,'');$('upmsg').innerHTML='<span class="text-zinc-500">loaded <b>'+esc(f.name)+'</b> ('+f.size+' bytes) — name it and click Ingest.</span>';};
-   rd.readAsText(f);}
- $('bUp').onclick=async()=>{
-   const text=(pending||$('paste').value).trim();const system=($('upsys').value||'uploaded').trim();
-   if(!text){$('upmsg').innerHTML='<span class="text-red-500">nothing to ingest — drop a file or paste text.</span>';return;}
-   $('bUp').disabled=true;$('upmsg').innerHTML='<div class="text-zinc-500">ingesting <b>'+esc(system)+'</b> — building the graph<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span> (this can take ~1 min)</div><div class="skel mt-2 h-1.5 w-full"></div>';
-   const upWs=activeWs;
-   try{const up=await(await fetch('/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text,system:system,workspace:activeWs})})).json();
-     if(up.state==='error'||up.state==='busy'||up.error){$('bUp').disabled=false;$('upmsg').innerHTML='<span class="text-red-500">'+esc(up.error||'could not ingest')+'</span>';return;}
-     const deadline=Date.now()+90000;  // stop polling after ~90s instead of hanging forever on a stuck ingest
-     const t=setInterval(async()=>{
-       if(Date.now()>deadline){clearInterval(t);$('bUp').disabled=false;$('upmsg').innerHTML='<span class="text-red-500">ingest is taking longer than expected — check Systems in a moment.</span>';return;}
-       const st=await(await fetch('/ingest-status')).json();
-       if(st.wid&&st.wid!==upWs)return;
-       if(st.state==='done'){clearInterval(t);$('bUp').disabled=false;pending='';$('paste').value='';$('upmsg').innerHTML='<span class="text-amber-600 dark:text-amber-400">✓ ingested <b>'+esc(st.system)+'</b> — now searchable. Check Systems.</span>';}
-       else if(st.state==='error'){clearInterval(t);$('bUp').disabled=false;$('upmsg').innerHTML='<span class="text-red-500">ingest failed: '+esc(st.error||'')+'</span>';}
-     },2000);
-   }catch(e){$('bUp').disabled=false;$('upmsg').innerHTML='<span class="text-red-500">upload failed</span>';}
- };
-
- // Settings — bring your own LLM provider + API key, applied at runtime (no restart)
- (function(){
-   const m=$('setModal');if(!m)return;
-   const PRESETS={
-     openai:{model:'gpt-4o-mini',endpoint:'',key:true},
-     anthropic:{model:'claude-3-5-haiku-latest',endpoint:'',key:true},
-     gemini:{model:'openai/gemini-2.5-flash',endpoint:'https://generativelanguage.googleapis.com/v1beta/openai/',key:true},
-     openrouter:{model:'openrouter/meta-llama/llama-3.3-70b-instruct',endpoint:'https://openrouter.ai/api/v1',key:true},
-     groq:{model:'llama-3.3-70b-versatile',endpoint:'https://api.groq.com/openai/v1',key:true},
-     lmstudio:{model:'openai/your-model-id',endpoint:'http://localhost:1234/v1',key:false},
-     ollama:{model:'qwen2.5',endpoint:'http://localhost:11434',key:false},
-     custom:{model:'',endpoint:'',key:true}
-   };
-   const PROVIDER_MAP={openai:'openai',anthropic:'anthropic',gemini:'custom',openrouter:'custom',groq:'custom',lmstudio:'custom',ollama:'ollama',custom:'custom'};
-   // The backend collapses gemini/groq/openrouter/lmstudio to provider 'custom' — map a running config back to a dropdown value by endpoint.
-   function detect(cfg){const ep=(cfg.endpoint||'').toLowerCase();const pv=(cfg.provider||'').toLowerCase();
-     if(ep.indexOf('generativelanguage.googleapis')>=0)return'gemini';
-     if(ep.indexOf('api.groq.com')>=0)return'groq';
-     if(ep.indexOf('openrouter.ai')>=0)return'openrouter';
-     if(ep.indexOf(':1234')>=0)return'lmstudio';
-     if(pv==='ollama'||ep.indexOf(':11434')>=0)return'ollama';
-     if(pv==='anthropic')return'anthropic';
-     if(pv==='openai'&&!ep)return'openai';
-     return'custom';}
-   function fill(p){const d=PRESETS[p]||PRESETS.custom;$('setModelInput').value=d.model;$('setEndpoint').value=d.endpoint;$('setKey').placeholder=d.key?'sk-…':'(no key needed)';}
-   $('setProvider').onchange=()=>fill($('setProvider').value);
-   async function open(){$('setMsg').textContent='';$('setKey').value='';m.classList.remove('hidden');m.classList.add('flex');
-     fill('groq');$('setProvider').value='groq';  // safe fallback (never default to OpenAI, which we don't demo)
-     try{const cfg=await(await fetch('/llm-config')).json();const p=detect(cfg);$('setProvider').value=p;fill(p);
-       if(cfg.model)$('setModelInput').value=cfg.model;if(cfg.endpoint)$('setEndpoint').value=cfg.endpoint;}catch(e){}
-     renderSec();
-     setTimeout(()=>$('setProvider').focus(),40);}
-   // M5: surface the EXISTING single-tenant auth — read-only /health probe + client-token controls (no backend change).
-   async function renderSec(){const ss=$('secState'),row=$('secTokenRow');if(!ss)return;
-     let auth=false,demo=false;try{const h=await(await fetch('/health')).json();auth=!!h.auth;demo=!!h.demo;}catch(e){}
-     const hasTok=!!localStorage.getItem('mimir.token');
-     if(auth)ss.innerHTML='<span class="font-medium text-amber-700 dark:text-amber-300">Protected</span> — this instance requires an access token. '+(hasTok?'A token is saved in this browser.':'No token saved yet — you will be prompted on the next API call.');
-     else if(demo)ss.innerHTML='<span class="font-medium text-amber-600 dark:text-amber-300">Hosted demo</span> — open and rate-limited; the model is fixed and all data resets on restart.';
-     else ss.innerHTML='<span class="font-medium text-zinc-700 dark:text-zinc-200">Open (local mode)</span> — no token required.'+(hasTok?' A leftover client token is saved.':'');
-     if(row)row.classList.toggle('hidden',!(auth||hasTok));
-     const sc=$('secClear');if(sc)sc.classList.toggle('hidden',!hasTok);}
-   {const st=$('secSet');if(st)st.onclick=()=>{const v=($('secToken').value||'').trim();if(v){localStorage.setItem('mimir.token',v);$('secToken').value='';renderSec();}};}
-   {const sc=$('secClear');if(sc)sc.onclick=()=>{localStorage.removeItem('mimir.token');renderSec();};}
-   function close(){m.classList.add('hidden');m.classList.remove('flex');}
-   $('setBtn').onclick=open;$('setCancel').onclick=close;
-   m.addEventListener('click',e=>{if(e.target===m)close();});
-   $('setSave').onclick=async()=>{
-     const p=$('setProvider').value;
-     const keyVal=$('setKey').value.trim()||(p==='lmstudio'?'lm-studio':'');  // LM Studio ignores the key but litellm wants a non-empty one
-     const body={provider:PROVIDER_MAP[p]||'custom',model:$('setModelInput').value.trim(),endpoint:$('setEndpoint').value.trim(),api_key:keyVal};
-     $('setMsg').innerHTML='<span class="text-zinc-500">applying &amp; testing<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';$('setSave').disabled=true;
-     try{const j=await(await fetch('/llm-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
-       if(j.ok){$('setMsg').innerHTML='<span class="text-amber-600 dark:text-amber-400">Saved — now answering with '+esc(j.llm.label)+'.</span>';poll();setTimeout(close,950);}
-       else{$('setMsg').innerHTML='<span class="text-red-500">'+esc(j.error||'could not apply')+'</span>';}
-     }catch(e){$('setMsg').innerHTML='<span class="text-red-500">request failed</span>';}
-     $('setSave').disabled=false;
-   };
-   $('setReset').onclick=async()=>{$('setMsg').innerHTML='<span class="text-zinc-500">resetting…</span>';
-     try{const j=await(await fetch('/llm-config/reset',{method:'POST'})).json();
-       if(j&&j.ok===false){$('setMsg').innerHTML='<span class="text-amber-600 dark:text-amber-400">'+esc(j.error||'not available here')+'</span>';return;}
-       $('setMsg').innerHTML='<span class="text-amber-600 dark:text-amber-400">Back to the default model.</span>';$('setKey').value='';poll();}
-     catch(e){$('setMsg').innerHTML='<span class="text-red-500">reset failed</span>';}
-   };
-   fill('groq');  // harmless initial state; open() re-fills from the active config
- })();
-
- // Add system — name + content -> ingest into the active workspace (reuses /upload). Re-adding a
- // decommissioned name just brings it back (no soft-undo; you provide fresh content).
- (function(){
-   const m=$('addModal');if(!m)return;
-   function open(){$('addName').value='';$('addText').value='';$('addMsg').textContent='';m.classList.remove('hidden');m.classList.add('flex');setTimeout(()=>$('addName').focus(),40);}
-   function close(){m.classList.add('hidden');m.classList.remove('flex');}
-   const ab=$('addSysBtn');if(ab)ab.onclick=open;
-   $('addCancel').onclick=close;m.addEventListener('click',e=>{if(e.target===m)close();});
-   $('addOk').onclick=async()=>{
-     const name=($('addName').value||'').trim(),text=($('addText').value||'').trim();
-     if(!name||!text){$('addMsg').innerHTML='<span class="text-red-500">Add a name and some content.</span>';return;}
-     $('addOk').disabled=true;$('addMsg').innerHTML='<span class="text-zinc-500">building the graph<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span> (~30s)</span>';
-     const upWs=activeWs;
-     try{const r=await(await fetch('/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text,system:name,workspace:activeWs})})).json();
-       if(r.state==='error'||r.state==='busy'||r.error){$('addOk').disabled=false;$('addMsg').innerHTML='<span class="text-red-500">'+esc(r.error||'could not add')+'</span>';return;}
-       const deadline=Date.now()+90000;  // stop polling after ~90s instead of hanging forever on a stuck ingest
-       const t=setInterval(async()=>{
-         if(Date.now()>deadline){clearInterval(t);$('addOk').disabled=false;$('addMsg').innerHTML='<span class="text-red-500">ingest is taking longer than expected — check Systems in a moment.</span>';return;}
-         const st=await(await fetch('/ingest-status')).json();
-         if(st.wid&&st.wid!==upWs)return;
-         if(st.state==='done'){clearInterval(t);$('addOk').disabled=false;$('addMsg').innerHTML='<span class="text-amber-600 dark:text-amber-400">Added — '+esc(st.system)+' is in the graph.</span>';if(curView==='systems')loadSystems();setTimeout(close,1100);}
-         else if(st.state==='error'){clearInterval(t);$('addOk').disabled=false;$('addMsg').innerHTML='<span class="text-red-500">failed: '+esc(st.error||'')+'</span>';}
-       },2000);
-     }catch(e){$('addOk').disabled=false;$('addMsg').innerHTML='<span class="text-red-500">request failed</span>';}
-   };
- })();
 </script>
 </body></html>

@@ -1,0 +1,34 @@
+/* Build source for assets/app.css — the single stylesheet every template loads.
+ *
+ * Replaces the old runtime setup (Tailwind browser CDN + Google Fonts <link>), which
+ * compiled CSS in the browser on every page load and left the UI completely unstyled
+ * whenever the CDN was slow, blocked or offline. Everything here is served from our own
+ * host, so the console renders with no third-party request.
+ *
+ * Rebuild after changing markup (Tailwind only emits classes it can see):
+ *   npx @tailwindcss/cli@4 -i assets/tailwind.src.css -o assets/app.css --minify
+ *
+ * Page-specific rules deliberately stay in each template's own <style> block. Only the
+ * theme tokens and the generated utilities are shared.
+ */
+
+@import "tailwindcss";
+@import "./fonts/fonts.css";
+
+/* Templates are the only source of class names; the inline <script> blocks are scanned
+   too, which is what picks up the classes built inside JS template literals. */
+@source "../templates/*.html";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Cool yellow-tinted neutral palette: re-tints the zinc + slate ramps with a subtle golden
+   hint (blue > red) so the whole app reads as a deep, cool blue-gray — not brown, not flat
+   gray. Previously duplicated verbatim across the templates. */
+@theme {
+  --color-zinc-50:#f5f7fa; --color-zinc-100:#eef1f6; --color-zinc-200:#e0e5ee; --color-zinc-300:#cbd3e1;
+  --color-zinc-400:#93a0b5; --color-zinc-500:#64718a; --color-zinc-600:#475066; --color-zinc-700:#353d50;
+  --color-zinc-800:#222838; --color-zinc-900:#161b28; --color-zinc-950:#0d1119;
+  --color-slate-100:#eef1f6; --color-slate-200:#e0e5ee; --color-slate-300:#cbd3e1; --color-slate-400:#93a0b5;
+  --color-slate-500:#64718a; --color-slate-600:#475066; --color-slate-700:#353d50; --color-slate-800:#222838;
+  --color-slate-900:#141a27;
+}
