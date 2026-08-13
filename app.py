@@ -52,12 +52,18 @@ app = FastAPI(title="Mimir")
 BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 DOCS_DIR = BASE_DIR / "docs"
+ASSETS_DIR = BASE_DIR / "assets"
 QUARANTINE_DIR = BASE_DIR / "quarantine"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 if DOCS_DIR.exists():
     app.mount("/docs", StaticFiles(directory=str(DOCS_DIR)), name="docs")
+
+# The stylesheet and webfonts every template loads. Served from here rather than from a CDN
+# so the UI cannot render unstyled when the network is slow, filtered or absent.
+if ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
 
 _AUTH_TOKEN = os.environ.get("MIMIR_AUTH_TOKEN", "").strip()
@@ -111,6 +117,11 @@ def _is_authenticated(request: Request) -> bool:
 async def _auth_gate(request: Request, call_next):
     path = request.url.path
     is_admin_api = path.startswith("/api/admin/")
+    # Stylesheet and fonts. A <link> tag cannot carry a bearer header, so these have to sit
+    # outside the token check or every page an unauthenticated visitor is *meant* to see —
+    # the landing page, the login form, the admin gate — would render unstyled. They stay
+    # behind the network gate below, which is the control that actually matters here.
+    is_static_asset = path.startswith("/assets/")
 
     # The network gate is the outermost control, so it runs on every path - including the
     # login page and the admin console, and regardless of _AUTH_OPEN. A device outside the
@@ -131,7 +142,7 @@ async def _auth_gate(request: Request, call_next):
                 "detail": "Network Access Denied. Device is outside authorized government intranet."
             }, status_code=403)
 
-    if path not in _AUTH_OPEN or is_admin_api:
+    if (path not in _AUTH_OPEN and not is_static_asset) or is_admin_api:
         if _AUTH_TOKEN and not is_admin_api:
             if not _is_authenticated(request):
                 record_audit("auth.denied", ip=client_host, detail=f"invalid token on {path}")
@@ -171,7 +182,7 @@ async def serve_app():
     """Retired in favour of /portal, which is the maintained officer interface.
 
     Kept as a redirect rather than removed so existing links and bookmarks still land
-    somewhere sensible. templates/app.html is now unused.
+    somewhere sensible. The old templates/app.html has been deleted.
     """
     return RedirectResponse(url="/portal", status_code=307)
 

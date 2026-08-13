@@ -111,3 +111,7 @@ Thumbs.db
 
 # Staged uploads awaiting review; contents are transient by design.
 quarantine/
+
+# Build-time only: the Tailwind CLI that compiles assets/app.css. The compiled stylesheet
+# is committed, so nothing at runtime needs these.
+node_modules/
